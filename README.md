@@ -53,6 +53,8 @@ cp .env.example .env
 PORT=8000
 NODE_ENV=development
 HOST=0.0.0.0
+CORS_ORIGIN=*
+# Production: https://your-frontend.vercel.app
 
 # Database
 MONGODB_URI=mongodb://localhost:27017/shopee-video-gen

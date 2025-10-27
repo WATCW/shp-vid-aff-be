@@ -30,7 +30,7 @@ EXPOSE 8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-  CMD bun -e "fetch('http://localhost:8000/health').then(r => r.ok ? process.exit(0) : process.exit(1))"
+  CMD bun -e "fetch('http://localhost:3000/health').then(r => r.ok ? process.exit(0) : process.exit(1))"
 
 # Start both API and Worker using concurrently
 CMD ["bun", "run", "start"]

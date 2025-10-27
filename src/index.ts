@@ -43,8 +43,17 @@ const startServer = async () => {
     const app = new Elysia()
       // Manual CORS headers for all responses
       .onRequest(({ set, request }) => {
-        set.headers['Access-Control-Allow-Origin'] = request.headers.get('origin') || '*'
-        set.headers['Access-Control-Allow-Credentials'] = 'true'
+        const origin = request.headers.get('origin')
+        const allowedOrigin = config.server.corsOrigin
+
+        // Set CORS origin
+        if (allowedOrigin === '*') {
+          set.headers['Access-Control-Allow-Origin'] = '*'
+        } else if (origin && (allowedOrigin === origin || allowedOrigin.split(',').includes(origin))) {
+          set.headers['Access-Control-Allow-Origin'] = origin
+          set.headers['Access-Control-Allow-Credentials'] = 'true'
+        }
+
         set.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, PATCH, DELETE, OPTIONS'
         set.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
 
@@ -57,8 +66,15 @@ const startServer = async () => {
 
       // Add CORS headers to all responses including errors
       .onAfterHandle(({ set, request }) => {
-        set.headers['Access-Control-Allow-Origin'] = request.headers.get('origin') || '*'
-        set.headers['Access-Control-Allow-Credentials'] = 'true'
+        const origin = request.headers.get('origin')
+        const allowedOrigin = config.server.corsOrigin
+
+        if (allowedOrigin === '*') {
+          set.headers['Access-Control-Allow-Origin'] = '*'
+        } else if (origin && (allowedOrigin === origin || allowedOrigin.split(',').includes(origin))) {
+          set.headers['Access-Control-Allow-Origin'] = origin
+          set.headers['Access-Control-Allow-Credentials'] = 'true'
+        }
       })
 
       // Swagger Documentation
