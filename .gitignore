@@ -1,0 +1,53 @@
+# Dependencies
+node_modules/
+bun.lockb
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Build outputs
+dist/
+build/
+*.log
+
+# Storage
+storage/
+uploads/
+videos/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# MongoDB
+data/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pino-*.log
+
+# Testing
+coverage/
+.nyc_output/
+
+# Production
+.cache/
+
+# Misc
+.eslintcache

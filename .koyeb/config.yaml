@@ -1,0 +1,61 @@
+# Koyeb configuration
+app: shopee-video-generator
+
+services:
+  - name: api-worker
+    type: web
+    env:
+      # Runtime
+      - name: NODE_ENV
+        value: production
+      - name: PORT
+        value: "3000"
+      - name: HOST
+        value: 0.0.0.0
+
+      # Database (ต้องตั้งค่าใน Koyeb Dashboard)
+      # - name: MONGODB_URI
+      #   secret: MONGODB_URI
+
+      # Queue
+      - name: RABBITMQ_URL
+        value: amqp://01.proxy.koyeb.app:21185
+      - name: QUEUE_CONCURRENCY
+        value: "3"
+
+      # AI (ต้องตั้งค่าใน Koyeb Dashboard)
+      # - name: OPENAI_API_KEY
+      #   secret: OPENAI_API_KEY
+      - name: AI_PROVIDER
+        value: openai
+      - name: OPENAI_MODEL
+        value: gpt-4o-mini
+
+      # Logging
+      - name: LOG_LEVEL
+        value: info
+
+    build:
+      dockerfile: Dockerfile
+
+    ports:
+      - port: 3000
+        protocol: http
+
+    regions:
+      - fra
+
+    instance_type: nano
+
+    autoscaling:
+      min: 1
+      max: 1
+
+    healthcheck:
+      http:
+        path: /health
+        port: 3000
+      grace_period: 30
+      interval: 30
+      timeout: 10
+      restart_limit: 3

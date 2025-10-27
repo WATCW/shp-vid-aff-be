@@ -1,0 +1,9 @@
+# Bun configuration
+# Module resolution with path aliases - Bun reads tsconfig.json automatically
+[install]
+# Install packages automatically
+auto = true
+
+[test]
+# Test configuration
+preload = ["./tsconfig.json"]
