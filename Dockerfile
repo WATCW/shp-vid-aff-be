@@ -12,7 +12,6 @@ FROM base AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
-ENV PORT=8000
 ENV HOST=0.0.0.0
 
 # Copy dependencies and source files
@@ -25,12 +24,12 @@ COPY bunfig.toml ./bunfig.toml
 # Create storage directories
 RUN mkdir -p storage/uploads storage/videos assets/music assets/fonts assets/images
 
-# Expose port
-EXPOSE 8000
+# Expose port (default 3000, can be overridden by env)
+EXPOSE 3000
 
-# Health check
+# Health check (uses PORT env var or defaults to 3000)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-  CMD bun -e "fetch('http://localhost:3000/health').then(r => r.ok ? process.exit(0) : process.exit(1))"
+  CMD bun -e "fetch('http://localhost:' + (process.env.PORT || '3000') + '/health').then(r => r.ok ? process.exit(0) : process.exit(1))"
 
 # Start both API and Worker using concurrently
 CMD ["bun", "run", "start"]

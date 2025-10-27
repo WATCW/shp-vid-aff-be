@@ -14,10 +14,75 @@ services:
       - mongodb_config:/data/configdb
     networks:
       - shopee-video-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # Note: Redis and RabbitMQ are now external services
-  # - RabbitMQ: Using Koyeb endpoint (amqp://01.proxy.koyeb.app:21185)
-  # - Redis: Not needed anymore (migrated to RabbitMQ)
+  redis:
+    image: redis:7-alpine
+    container_name: shopee-video-redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    networks:
+      - shopee-video-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: shopee-video-rabbitmq
+    restart: unless-stopped
+    ports:
+      - '5672:5672'
+      - '15672:15672'
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - shopee-video-network
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: shopee-video-backend
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    env_file:
+      - .env
+    environment:
+      MONGODB_URI: mongodb://mongodb:27017/shopee-video-gen
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      NODE_ENV: production
+    volumes:
+      - ./storage:/app/storage
+      - ./assets:/app/assets
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - shopee-video-network
+    profiles:
+      - production
 
   # Optional: MongoDB Admin UI
   mongo-express:
@@ -36,11 +101,12 @@ services:
     profiles:
       - dev
 
-
 volumes:
   mongodb_data:
     driver: local
   mongodb_config:
+    driver: local
+  rabbitmq_data:
     driver: local
 
 networks:
