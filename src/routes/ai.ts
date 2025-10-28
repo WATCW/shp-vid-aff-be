@@ -3,6 +3,7 @@ import { Product } from '@models/product.model'
 import { Job } from '@models/job.model'
 import { addAIContentJob, queuesInitialized } from '@jobs/queue'
 import logger from '@utils/logger'
+import { AIContentService } from '@services/ai-content.service'
 
 export const aiRoutes = new Elysia({ prefix: '/ai' })
   /**
@@ -17,11 +18,67 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
 
         // Check if queues are available
         if (!queuesInitialized) {
-          logger.error('❌ [AI] Queue system not available - RabbitMQ not connected')
+          logger.warn('⚠️  [AI] Queue system not available - Using synchronous processing')
+
+          // Fallback to synchronous processing
+          const aiService = new AIContentService()
+          const results = []
+          const errors = []
+
+          for (const productId of productIds) {
+            try {
+              const product = await Product.findById(productId)
+
+              if (!product) {
+                errors.push({
+                  productId,
+                  error: 'Product not found',
+                })
+                continue
+              }
+
+              logger.info(`🔄 [AI] Processing ${product.name} synchronously...`)
+
+              // Generate content directly
+              const result = await aiService.generateContent({
+                productName: product.name,
+                productDescription: product.description,
+                price: product.price,
+                originalPrice: product.originalPrice,
+                shopName: product.shopName,
+                options,
+              })
+
+              // Update product with generated content
+              product.aiContent = result
+              product.aiGeneratedAt = new Date()
+              await product.save()
+
+              results.push({
+                productId: product._id,
+                productName: product.name,
+                content: result,
+              })
+
+              logger.info(`✅ [AI] Content generated for ${product.name}`)
+
+            } catch (error) {
+              errors.push({
+                productId,
+                error: error instanceof Error ? error.message : 'Unknown error',
+              })
+              logger.error(`❌ [AI] Failed to generate content for ${productId}:`, error)
+            }
+          }
+
           return {
-            success: false,
-            error: 'Queue system is not available. Please ensure RabbitMQ is running.',
-            hint: 'Start RabbitMQ with: docker-compose up -d rabbitmq',
+            success: results.length > 0,
+            mode: 'synchronous',
+            processed: results.length,
+            failed: errors.length,
+            results,
+            errors: errors.length > 0 ? errors : undefined,
+            message: 'Content generated synchronously (Queue unavailable)',
           }
         }
 
