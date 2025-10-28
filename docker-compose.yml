@@ -63,12 +63,7 @@ services:
     ports:
       - '3000:3000'
     env_file:
-      - .env
-    environment:
-      MONGODB_URI: mongodb://mongodb:27017/shopee-video-gen
-      REDIS_URL: redis://redis:6379
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
-      NODE_ENV: production
+      - .env.docker
     volumes:
       - ./storage:/app/storage
       - ./assets:/app/assets
