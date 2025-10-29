@@ -11,6 +11,9 @@ import { join } from 'path'
 import { uploadRoutes } from './routes/upload'
 import { productRoutes } from './routes/products'
 import { aiRoutes } from './routes/ai'
+import { videoRoutes } from './routes/videos'
+import { templateRoutes } from './routes/templates'
+import { musicRoutes } from './routes/music'
 
 // Ensure storage directories exist
 const ensureDirectories = () => {
@@ -96,6 +99,7 @@ const startServer = async () => {
               { name: 'AI', description: 'AI content generation' },
               { name: 'Videos', description: 'Video generation and management' },
               { name: 'Templates', description: 'Video templates' },
+              { name: 'Music', description: 'Music and assets management' },
             ],
           },
           path: '/swagger',
@@ -127,6 +131,9 @@ const startServer = async () => {
           .use(uploadRoutes)
           .use(productRoutes)
           .use(aiRoutes)
+          .use(videoRoutes)
+          .use(templateRoutes)
+          .use(musicRoutes)
       )
 
       // Serve uploaded files and videos
