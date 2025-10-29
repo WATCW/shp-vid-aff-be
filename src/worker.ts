@@ -3,6 +3,7 @@ import { ensureRabbitMQ, getConnection } from '@config/rabbitmq'
 import { initializeQueues } from './jobs/queue'
 import logger from '@utils/logger'
 import { createAIContentWorker } from './jobs/ai-content.job'
+import { startVideoWorker } from './jobs/video-generation.job'
 
 /**
  * Background worker process for handling queue jobs
@@ -60,6 +61,9 @@ Press CTRL+C to stop
     // Start AI content worker
     const aiContentWorker = await createAIContentWorker()
 
+    // Start video generation worker
+    await startVideoWorker()
+
     if (!aiContentWorker) {
       logger.error('❌ Failed to create AI content worker')
       logger.warn('⚠️  Worker will run in degraded mode')
@@ -101,6 +105,7 @@ Press CTRL+C to stop
 
 📊 Active Workers:
   - AI Content Generation (RabbitMQ consumer)
+  - Video Generation (RabbitMQ consumer)
   - Queue: ${aiContentWorker.queueName}
 
 Press CTRL+C to stop

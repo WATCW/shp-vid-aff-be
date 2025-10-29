@@ -17,9 +17,13 @@ const ensureDirectories = () => {
   const dirs = [
     config.storage.path,
     config.storage.uploadPath,
+    './storage/videos',
+    './storage/thumbnails',
+    './storage/temp',
     './assets/music',
     './assets/fonts',
     './assets/images',
+    './assets/templates',
   ]
 
   dirs.forEach((dir) => {

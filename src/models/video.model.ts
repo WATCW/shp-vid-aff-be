@@ -30,6 +30,7 @@ export interface IVideoOutput {
 
 export interface IVideo extends Document {
   productId: Types.ObjectId
+  templateId?: Types.ObjectId
 
   videoConfig: IVideoConfig
   content: IVideoContent
@@ -39,6 +40,8 @@ export interface IVideo extends Document {
   status: 'queued' | 'processing' | 'completed' | 'failed'
   progress: number
   error?: string
+  renderTime?: number
+  uploadedToGoogleDrive: boolean
 
   generatedAt: Date
   completedAt?: Date
@@ -80,6 +83,12 @@ const VideoSchema = new Schema<IVideo>({
     index: true,
   },
 
+  templateId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Template',
+    index: true,
+  },
+
   videoConfig: {
     type: VideoConfigSchema,
     required: true,
@@ -112,6 +121,17 @@ const VideoSchema = new Schema<IVideo>({
   },
 
   error: { type: String },
+
+  renderTime: {
+    type: Number,
+    min: 0,
+  },
+
+  uploadedToGoogleDrive: {
+    type: Boolean,
+    default: false,
+    index: true,
+  },
 
   generatedAt: {
     type: Date,

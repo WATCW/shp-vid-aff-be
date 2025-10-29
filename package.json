@@ -13,6 +13,7 @@
     "test": "bun test",
     "lint": "eslint src/**/*.ts",
     "db:seed": "bun src/scripts/seed.ts",
+    "db:seed:templates": "bun src/scripts/seed-templates.ts",
     "db:reset": "bun src/scripts/reset-db.ts"
   },
   "dependencies": {
