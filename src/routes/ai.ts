@@ -269,12 +269,65 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
 
   /**
    * Clear/Cancel pending jobs for products
-   */
-  .delete(
-    '/jobs/clear',
-    async ({ body }) => {
-      try {
-        const { productIds } = body
+ 	  /**
+	   * Get AI jobs by product IDs
+	   */
+	  .post(
+	    '/jobs/by-products',
+	    async ({ body }) => {
+	      try {
+	        const { productIds } = body
+	        logger.info(`🔍 [AI] Fetching jobs for ${productIds.length} products...`)
+	
+	        const jobs = await Job.find({
+	          type: 'ai_content',
+	          productId: { $in: productIds },
+	          status: { $nin: ['completed', 'failed', 'cancelled'] }, // Only show pending/active jobs
+	        }).sort({ createdAt: -1 })
+	
+	        logger.info(`✅ [AI] Found ${jobs.length} pending/active jobs`)
+	
+	        // Convert jobs to a format that contains the necessary info for the frontend
+	        const jobResults = jobs.map(job => ({
+	          jobId: job.bullJobId,
+	          dbJobId: job._id,
+	          productId: job.productId,
+	          status: job.status,
+	        }))
+	
+	        return {
+	          success: true,
+	          jobs: jobResults,
+	        }
+	
+	      } catch (error) {
+	        logger.error('❌ [AI] Failed to fetch jobs by product:', error)
+	        return {
+	          success: false,
+	          error: error instanceof Error ? error.message : 'Failed to fetch jobs',
+	        }
+	      }
+	    },
+	    {
+	      body: t.Object({
+	        productIds: t.Array(t.String()),
+	      }),
+	      detail: {
+	        tags: ['AI'],
+	        summary: 'Get AI jobs by product IDs',
+	        description: 'Retrieve pending or active AI jobs for a list of products',
+	      },
+	    }
+	  )
+	
+	  /**
+	   * Clear/Cancel pending jobs for products
+	   */
+	  .delete(
+	    '/jobs/clear',
+	    async ({ body }) => {
+	      try {
+	        const { productIds } = body
         logger.info(`🗑️  [AI] Clearing pending jobs for ${productIds?.length || 'all'} products...`)
 
         let filter: any = {
