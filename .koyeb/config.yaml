@@ -13,23 +13,36 @@ services:
       - name: HOST
         value: 0.0.0.0
 
-      # Database (ต้องตั้งค่าใน Koyeb Dashboard)
+      # ⚠️  REQUIRED: Set these in Koyeb Dashboard > Secrets
+      # Database
       # - name: MONGODB_URI
       #   secret: MONGODB_URI
 
-      # Queue
-      - name: RABBITMQ_URL
-        value: amqp://01.proxy.koyeb.app:21185
+      # AI API Key (choose one)
+      # - name: OPENAI_API_KEY
+      #   secret: OPENAI_API_KEY
+
+      # Queue (Optional - will use synchronous mode if not available)
       - name: QUEUE_CONCURRENCY
         value: "3"
 
-      # AI (ต้องตั้งค่าใน Koyeb Dashboard)
-      # - name: OPENAI_API_KEY
-      #   secret: OPENAI_API_KEY
+      # AI Configuration
       - name: AI_PROVIDER
         value: openai
       - name: OPENAI_MODEL
         value: gpt-4o-mini
+      # ⚠️  Available models: gpt-4o, gpt-4o-mini, gpt-4-turbo
+
+      - name: ANTHROPIC_MODEL
+        value: claude-3-5-sonnet-20241022
+
+      # Storage
+      - name: STORAGE_PATH
+        value: ./storage/videos
+      - name: UPLOAD_PATH
+        value: ./storage/uploads
+      - name: MAX_FILE_SIZE
+        value: "104857600"
 
       # Logging
       - name: LOG_LEVEL
