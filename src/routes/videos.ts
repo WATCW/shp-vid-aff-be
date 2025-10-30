@@ -155,7 +155,7 @@ export const videoRoutes = new Elysia({ prefix: '/videos' })
         // Create job record
         const job = new Job({
           productId,
-          type: 'video_generation',
+          type: 'generate_video',
           status: 'waiting',
           progress: 0,
         })

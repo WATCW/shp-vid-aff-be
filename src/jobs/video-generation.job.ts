@@ -18,7 +18,7 @@ const processVideoGenerationJob = async (messageData: VideoJobData & { jobId: st
   try {
     // Update job status
     await Job.findOneAndUpdate(
-      { productId, type: 'video_generation', status: { $ne: 'completed' } },
+      { productId, type: 'generate_video', status: { $ne: 'completed' } },
       {
         $set: { status: 'active', startedAt: new Date() },
         $inc: { attempts: 1 },
@@ -39,7 +39,7 @@ const processVideoGenerationJob = async (messageData: VideoJobData & { jobId: st
     // Update progress
     const updateProgress = async (progress: number) => {
       await Job.findOneAndUpdate(
-        { productId, type: 'video_generation', status: 'active' },
+        { productId, type: 'generate_video', status: 'active' },
         { $set: { progress } }
       )
 
@@ -67,7 +67,7 @@ const processVideoGenerationJob = async (messageData: VideoJobData & { jobId: st
 
     // Update job record
     await Job.findOneAndUpdate(
-      { productId, type: 'video_generation', status: 'active' },
+      { productId, type: 'generate_video', status: 'active' },
       {
         $set: {
           status: 'completed',
@@ -96,7 +96,7 @@ const processVideoGenerationJob = async (messageData: VideoJobData & { jobId: st
 
     // Update job as failed
     await Job.findOneAndUpdate(
-      { productId, type: 'video_generation' },
+      { productId, type: 'generate_video' },
       {
         $set: {
           status: 'failed',
@@ -124,7 +124,7 @@ const processVideoGenerationJob = async (messageData: VideoJobData & { jobId: st
  */
 export const startVideoWorker = async () => {
   if (!rabbitmqAvailable) {
-    logger.warn('   RabbitMQ not available - Video worker disabled')
+    logger.warn('ï¿½  RabbitMQ not available - Video worker disabled')
     return
   }
 
@@ -139,7 +139,7 @@ export const startVideoWorker = async () => {
     // Set prefetch to 1 (process one job at a time per worker)
     await channel.prefetch(1)
 
-    logger.info(`<¬ Video generation worker started - Listening on queue: ${QUEUE_NAMES.VIDEO}`)
+    logger.info(`<ï¿½ Video generation worker started - Listening on queue: ${QUEUE_NAMES.VIDEO}`)
 
     // Start consuming messages
     await channel.consume(
@@ -184,10 +184,10 @@ export const startVideoWorker = async () => {
 export const getVideoJobStats = async () => {
   try {
     const [waiting, active, completed, failed] = await Promise.all([
-      Job.countDocuments({ type: 'video_generation', status: 'waiting' }),
-      Job.countDocuments({ type: 'video_generation', status: 'active' }),
-      Job.countDocuments({ type: 'video_generation', status: 'completed' }),
-      Job.countDocuments({ type: 'video_generation', status: 'failed' }),
+      Job.countDocuments({ type: 'generate_video', status: 'waiting' }),
+      Job.countDocuments({ type: 'generate_video', status: 'active' }),
+      Job.countDocuments({ type: 'generate_video', status: 'completed' }),
+      Job.countDocuments({ type: 'generate_video', status: 'failed' }),
     ])
 
     return {
