@@ -294,10 +294,40 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
           const bullJob = await aiContentQueue.getJob(params.jobId)
 
           if (!bullJob) {
-            logger.warn(`[AI] Job not found in queue: ${params.jobId}`)
-            return {
-              success: false,
-              error: 'Job not found in queue',
+            logger.warn(`[AI] Job not found in queue: ${params.jobId}, trying database...`)
+
+            // Fallback to database if not found in queue
+            try {
+              const dbJob = await Job.findById(params.jobId)
+
+              if (!dbJob) {
+                logger.warn(`[AI] Job not found in database either: ${params.jobId}`)
+                return {
+                  success: false,
+                  error: 'Job not found',
+                }
+              }
+
+              logger.info(`[AI] Found job in database (fallback): ${dbJob.status}`)
+
+              return {
+                success: true,
+                job: {
+                  id: dbJob._id.toString(),
+                  state: dbJob.status,
+                  progress: dbJob.status === 'completed' ? 100 : dbJob.status === 'active' ? 50 : 0,
+                  data: dbJob.data,
+                  result: dbJob.result,
+                  failedReason: dbJob.error,
+                },
+                mode: 'database-fallback',
+              }
+            } catch (dbError) {
+              logger.error(`[AI] Database fallback error:`, dbError)
+              return {
+                success: false,
+                error: 'Job not found in queue or database',
+              }
             }
           }
 
@@ -320,9 +350,40 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
           }
         } catch (queueError) {
           logger.error(`[AI] Queue error finding job ${params.jobId}:`, queueError)
-          return {
-            success: false,
-            error: 'Failed to get job from queue',
+
+          // Fallback to database on queue error
+          logger.info('[AI] Attempting database fallback after queue error...')
+
+          try {
+            const dbJob = await Job.findById(params.jobId)
+
+            if (!dbJob) {
+              return {
+                success: false,
+                error: 'Job not found in queue or database',
+              }
+            }
+
+            logger.info(`[AI] Found job in database (error fallback): ${dbJob.status}`)
+
+            return {
+              success: true,
+              job: {
+                id: dbJob._id.toString(),
+                state: dbJob.status,
+                progress: dbJob.status === 'completed' ? 100 : dbJob.status === 'active' ? 50 : 0,
+                data: dbJob.data,
+                result: dbJob.result,
+                failedReason: dbJob.error,
+              },
+              mode: 'database-fallback',
+            }
+          } catch (dbError) {
+            logger.error(`[AI] Database fallback also failed:`, dbError)
+            return {
+              success: false,
+              error: 'Failed to get job from queue or database',
+            }
           }
         }
 
