@@ -3,6 +3,8 @@ import { staticPlugin } from '@elysiajs/static'
 import { swagger } from '@elysiajs/swagger'
 import config from '@config/env'
 import { connectDatabase } from '@config/database'
+import { ensureRabbitMQ } from '@config/rabbitmq'
+import { initializeQueues } from './jobs/queue'
 import logger from '@utils/logger'
 import { mkdirSync, existsSync } from 'fs'
 import { join } from 'path'
@@ -51,6 +53,20 @@ const startServer = async () => {
     logger.info('Initializing default data...')
     await initializeData()
     logger.info('Default data initialization complete')
+
+    // Initialize RabbitMQ and queues
+    logger.info('Initializing RabbitMQ connection...')
+    const rabbitMQReady = await ensureRabbitMQ()
+
+    if (rabbitMQReady) {
+      await initializeQueues()
+      logger.info('✅ RabbitMQ queues initialized successfully')
+    } else {
+      logger.warn('⚠️  RabbitMQ is not available - Queue features (video generation) will be disabled')
+      logger.info('💡 To enable queue features, please check:')
+      logger.info('   1. RabbitMQ endpoint is accessible')
+      logger.info('   2. RABBITMQ_URL environment variable is set correctly')
+    }
 
     // Create Elysia app
     const app = new Elysia()

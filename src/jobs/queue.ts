@@ -139,17 +139,32 @@ export const addVideoJob = async (
   data: VideoJobData,
   priority: number = 5
 ): Promise<string | null> => {
+  logger.info('[QUEUE] 🎬 Attempting to add video job:', {
+    productId: data.productId,
+    videoId: data.videoId,
+    templateId: data.templateId,
+    queuesInitialized,
+  })
+
   if (!queuesInitialized) {
-    logger.warn('Cannot add video job - Queue not initialized (RabbitMQ unavailable)')
+    logger.error('[QUEUE] ❌ Cannot add video job - Queue not initialized (RabbitMQ unavailable)')
     return null
   }
 
   const jobId = `video-${data.videoId}-${Date.now()}`
 
+  logger.info('[QUEUE] 📤 Publishing to queue:', { jobId, queueName: QUEUE_NAMES.VIDEO })
+
   const success = await publishToQueue(QUEUE_NAMES.VIDEO, data, {
     priority,
     jobId,
   })
+
+  if (success) {
+    logger.info('[QUEUE] ✅ Video job added successfully:', jobId)
+  } else {
+    logger.error('[QUEUE] ❌ Failed to add video job:', jobId)
+  }
 
   return success ? jobId : null
 }

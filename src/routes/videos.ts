@@ -149,8 +149,17 @@ export const videoRoutes = new Elysia({ prefix: '/videos' })
       try {
         const { productId, templateId, musicId, customText } = body
 
+        logger.info('[VIDEO-GEN] 🎬 Starting video generation request:', {
+          productId,
+          templateId,
+          musicId,
+          customTextLength: customText?.length,
+        })
+
         // Create video ID
         const videoId = nanoid()
+
+        logger.info('[VIDEO-GEN] 🆔 Generated video ID:', videoId)
 
         // Create job record
         const job = new Job({
@@ -161,6 +170,7 @@ export const videoRoutes = new Elysia({ prefix: '/videos' })
         })
 
         await job.save()
+        logger.info('[VIDEO-GEN] 💾 Job record saved:', job._id)
 
         // Add to queue
         const jobId = await addVideoJob({
@@ -174,7 +184,13 @@ export const videoRoutes = new Elysia({ prefix: '/videos' })
         })
 
         if (!jobId) {
-          throw new Error('Failed to queue video generation job')
+          // Update job as failed since we couldn't queue it
+          await Job.findByIdAndUpdate(job._id, {
+            status: 'failed',
+            error: 'RabbitMQ is not available. Please contact the administrator.',
+          })
+
+          throw new Error('Failed to queue video generation job: RabbitMQ is not available')
         }
 
         logger.info(`Video generation job queued: ${jobId}`)
