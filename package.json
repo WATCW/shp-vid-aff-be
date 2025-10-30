@@ -11,7 +11,7 @@
     "start:api": "bun src/index.ts",
     "start:worker": "bun src/worker.ts",
     "test": "bun test",
-    "lint": "eslint src/**/*.ts",
+    "db:init": "bun src/scripts/init-data.ts",
     "db:seed": "bun src/scripts/seed.ts",
     "db:seed:templates": "bun src/scripts/seed-templates.ts",
     "db:seed:music": "bun src/scripts/seed-music.ts",

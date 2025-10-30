@@ -6,6 +6,7 @@ import { connectDatabase } from '@config/database'
 import logger from '@utils/logger'
 import { mkdirSync, existsSync } from 'fs'
 import { join } from 'path'
+import { initializeData } from './scripts/init-data'
 
 // Import routes
 import { uploadRoutes } from './routes/upload'
@@ -45,6 +46,11 @@ const startServer = async () => {
 
     // Ensure storage directories
     ensureDirectories()
+
+    // Initialize default data (templates, music)
+    logger.info('Initializing default data...')
+    await initializeData()
+    logger.info('Default data initialization complete')
 
     // Create Elysia app
     const app = new Elysia()
