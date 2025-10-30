@@ -224,6 +224,36 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
     '/status/:jobId',
     async ({ params }) => {
       try {
+        // Check if queues are available
+        if (!queuesInitialized) {
+          logger.warn('⚠️  [AI] Queue system not available')
+
+          // Try to get status from database instead
+          const dbJob = await Job.findById(params.jobId)
+
+          if (!dbJob) {
+            return {
+              success: false,
+              error: 'Job not found',
+            }
+          }
+
+          return {
+            success: true,
+            job: {
+              id: dbJob._id.toString(),
+              state: dbJob.status,
+              progress: dbJob.status === 'completed' ? 100 : dbJob.status === 'active' ? 50 : 0,
+              data: dbJob.data,
+              result: dbJob.result,
+              failedReason: dbJob.error,
+            },
+            mode: 'database',
+          }
+        }
+
+        // Queue mode - get from BullMQ
+        const { aiContentQueue } = await import('@jobs/queue')
         const bullJob = await aiContentQueue.getJob(params.jobId)
 
         if (!bullJob) {
@@ -246,6 +276,7 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
             result: bullJob.returnvalue,
             failedReason: bullJob.failedReason,
           },
+          mode: 'queue',
         }
 
       } catch (error) {
@@ -413,6 +444,40 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
           }
         }
 
+        // Check if queues are available
+        if (!queuesInitialized) {
+          logger.warn('⚠️  [AI] Queue system not available - Using synchronous processing')
+
+          // Fallback to synchronous processing
+          const aiService = new AIContentService()
+
+          logger.info(`🔄 [AI] Regenerating ${product.name} synchronously...`)
+
+          const result = await aiService.generateContent({
+            productName: product.name,
+            productDescription: product.description,
+            price: product.price,
+            originalPrice: product.originalPrice,
+            shopName: product.shopName,
+            options: body,
+          })
+
+          // Update product with generated content
+          product.aiContent = result
+          product.aiGeneratedAt = new Date()
+          await product.save()
+
+          logger.info(`✅ [AI] Content regenerated for ${product.name}`)
+
+          return {
+            success: true,
+            mode: 'synchronous',
+            productId: product._id,
+            content: result,
+            message: 'Content regenerated successfully (synchronous mode)',
+          }
+        }
+
         // Create job record
         const jobRecord = await Job.create({
           type: 'ai_content',
@@ -432,6 +497,7 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
 
         return {
           success: true,
+          mode: 'queue',
           jobId: bullJob.id,
           dbJobId: jobRecord._id,
         }
@@ -467,10 +533,38 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
     '/queue/stats',
     async () => {
       try {
+        // Check if queues are available
+        if (!queuesInitialized) {
+          logger.warn('⚠️  [AI] Queue system not available')
+
+          // Get stats from database instead
+          const [waiting, active, completed, failed] = await Promise.all([
+            Job.countDocuments({ type: 'ai_content', status: 'waiting' }),
+            Job.countDocuments({ type: 'ai_content', status: 'active' }),
+            Job.countDocuments({ type: 'ai_content', status: 'completed' }),
+            Job.countDocuments({ type: 'ai_content', status: 'failed' }),
+          ])
+
+          return {
+            success: true,
+            mode: 'database',
+            stats: {
+              waiting,
+              active,
+              completed,
+              failed,
+            },
+            message: 'Queue system unavailable - showing database statistics',
+          }
+        }
+
+        // Queue mode - get from BullMQ
+        const { aiContentQueue } = await import('@jobs/queue')
         const counts = await aiContentQueue.getJobCounts()
 
         return {
           success: true,
+          mode: 'queue',
           stats: counts,
         }
 
