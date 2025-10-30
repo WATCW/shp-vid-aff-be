@@ -71,6 +71,26 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
             }
           }
 
+          // Clean up any pending jobs for these products in database
+          try {
+            const productObjectIds = results.map(r => r.productId)
+            await Job.updateMany(
+              {
+                productId: { $in: productObjectIds },
+                type: 'ai_content',
+                status: { $in: ['waiting', 'active'] },
+              },
+              {
+                $set: {
+                  status: 'completed',
+                  completedAt: new Date(),
+                },
+              }
+            )
+          } catch (cleanupError) {
+            logger.warn('[AI] Failed to cleanup pending jobs:', cleanupError)
+          }
+
           return {
             success: results.length > 0,
             mode: 'synchronous',
@@ -79,6 +99,7 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
             results,
             errors: errors.length > 0 ? errors : undefined,
             message: 'Content generated synchronously (Queue unavailable)',
+            // Don't return jobs array - synchronous mode doesn't have jobs to poll
           }
         }
 
@@ -224,59 +245,85 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
     '/status/:jobId',
     async ({ params }) => {
       try {
+        logger.info(`[AI] Getting status for job: ${params.jobId}`)
+
         // Check if queues are available
         if (!queuesInitialized) {
-          logger.warn('⚠️  [AI] Queue system not available')
+          logger.warn('⚠️  [AI] Queue system not available - using database mode')
 
           // Try to get status from database instead
-          const dbJob = await Job.findById(params.jobId)
+          try {
+            const dbJob = await Job.findById(params.jobId)
 
-          if (!dbJob) {
+            if (!dbJob) {
+              logger.warn(`[AI] Job not found in database: ${params.jobId}`)
+              return {
+                success: false,
+                error: 'Job not found',
+              }
+            }
+
+            logger.info(`[AI] Found job in database: ${dbJob.status}`)
+
+            return {
+              success: true,
+              job: {
+                id: dbJob._id.toString(),
+                state: dbJob.status,
+                progress: dbJob.status === 'completed' ? 100 : dbJob.status === 'active' ? 50 : 0,
+                data: dbJob.data,
+                result: dbJob.result,
+                failedReason: dbJob.error,
+              },
+              mode: 'database',
+            }
+          } catch (dbError) {
+            logger.error(`[AI] Database error finding job ${params.jobId}:`, dbError)
             return {
               success: false,
-              error: 'Job not found',
+              error: 'Invalid job ID or database error',
             }
-          }
-
-          return {
-            success: true,
-            job: {
-              id: dbJob._id.toString(),
-              state: dbJob.status,
-              progress: dbJob.status === 'completed' ? 100 : dbJob.status === 'active' ? 50 : 0,
-              data: dbJob.data,
-              result: dbJob.result,
-              failedReason: dbJob.error,
-            },
-            mode: 'database',
           }
         }
 
         // Queue mode - get from BullMQ
-        const { aiContentQueue } = await import('@jobs/queue')
-        const bullJob = await aiContentQueue.getJob(params.jobId)
+        logger.info('[AI] Using queue mode to get job status')
 
-        if (!bullJob) {
+        try {
+          const { aiContentQueue } = await import('@jobs/queue')
+          const bullJob = await aiContentQueue.getJob(params.jobId)
+
+          if (!bullJob) {
+            logger.warn(`[AI] Job not found in queue: ${params.jobId}`)
+            return {
+              success: false,
+              error: 'Job not found in queue',
+            }
+          }
+
+          const state = await bullJob.getState()
+          const progress = bullJob.progress
+
+          logger.info(`[AI] Found job in queue: ${state}`)
+
+          return {
+            success: true,
+            job: {
+              id: bullJob.id,
+              state,
+              progress,
+              data: bullJob.data,
+              result: bullJob.returnvalue,
+              failedReason: bullJob.failedReason,
+            },
+            mode: 'queue',
+          }
+        } catch (queueError) {
+          logger.error(`[AI] Queue error finding job ${params.jobId}:`, queueError)
           return {
             success: false,
-            error: 'Job not found',
+            error: 'Failed to get job from queue',
           }
-        }
-
-        const state = await bullJob.getState()
-        const progress = bullJob.progress
-
-        return {
-          success: true,
-          job: {
-            id: bullJob.id,
-            state,
-            progress,
-            data: bullJob.data,
-            result: bullJob.returnvalue,
-            failedReason: bullJob.failedReason,
-          },
-          mode: 'queue',
         }
 
       } catch (error) {
