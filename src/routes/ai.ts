@@ -268,6 +268,79 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
   )
 
   /**
+   * Get existing jobs by products
+   */
+  .post(
+    '/jobs/by-products',
+    async ({ body }) => {
+      try {
+        const { productIds } = body
+        logger.info(`🔍 [AI] Fetching jobs for ${productIds?.length || 0} products...`)
+
+        if (!productIds || productIds.length === 0) {
+          return {
+            success: true,
+            jobs: [],
+          }
+        }
+
+        // Find products by their MongoDB IDs
+        const products = await Product.find({ _id: { $in: productIds } })
+
+        if (products.length === 0) {
+          return {
+            success: true,
+            jobs: [],
+          }
+        }
+
+        // Find jobs for these products
+        const jobs = await Job.find({
+          productId: { $in: products.map(p => p._id) },
+          type: 'ai_content',
+          status: { $in: ['waiting', 'active'] },
+        }).sort({ createdAt: -1 })
+
+        logger.info(`✅ [AI] Found ${jobs.length} active jobs`)
+
+        // Map jobs to include productId
+        const jobsWithProductId = jobs.map(job => {
+          const product = products.find(p => p._id.toString() === job.productId.toString())
+          return {
+            jobId: job._id.toString(),
+            productId: product?.productId || job.productId.toString(),
+            status: job.status,
+            createdAt: job.createdAt,
+          }
+        })
+
+        return {
+          success: true,
+          jobs: jobsWithProductId,
+        }
+
+      } catch (error) {
+        logger.error('❌ [AI] Failed to fetch jobs by products:', error)
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to fetch jobs',
+          jobs: [],
+        }
+      }
+    },
+    {
+      body: t.Object({
+        productIds: t.Array(t.String()),
+      }),
+      detail: {
+        tags: ['AI'],
+        summary: 'Get jobs by products',
+        description: 'Fetch existing AI jobs for the given products',
+      },
+    }
+  )
+
+  /**
    * Clear/Cancel pending jobs for products
  	  /**
 	   * Get AI jobs by product IDs
