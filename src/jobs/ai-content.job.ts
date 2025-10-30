@@ -81,24 +81,40 @@ const processAIContentJob = async (messageData: AIContentJobData & { jobId: stri
     }
 
   } catch (error) {
-    logger.error(`[AI-WORKER] ❌ AI content job failed for product ${productId}:`, error)
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    const errorStack = error instanceof Error ? error.stack : undefined
+
+    logger.error(`[AI-WORKER] ❌ AI content job failed for product ${productId}:`)
+    logger.error(`Error: ${errorMessage}`)
+    if (errorStack) {
+      logger.error(`Stack: ${errorStack}`)
+    }
 
     // Update product status
-    await Product.findOneAndUpdate(
-      { productId },
-      { $set: { status: 'failed' } }
-    )
+    try {
+      await Product.findOneAndUpdate(
+        { productId },
+        { $set: { status: 'failed' } }
+      )
+    } catch (updateError) {
+      logger.error('[AI-WORKER] Failed to update product status:', updateError)
+    }
 
     // Update job record
-    await Job.findOneAndUpdate(
-      { productId, type: 'ai_content', status: 'active' },
-      {
-        $set: {
-          status: 'failed',
-          error: error instanceof Error ? error.message : 'Unknown error',
-        },
-      }
-    )
+    try {
+      await Job.findOneAndUpdate(
+        { productId, type: 'ai_content', status: 'active' },
+        {
+          $set: {
+            status: 'failed',
+            error: errorMessage,
+            completedAt: new Date(),
+          },
+        }
+      )
+    } catch (updateError) {
+      logger.error('[AI-WORKER] Failed to update job status:', updateError)
+    }
 
     throw error
   }
@@ -129,9 +145,22 @@ export const createAIContentWorker = async () => {
           return
         }
 
+        let messageData: any
+
+        // Try to parse message first - handle JSON parse errors
         try {
-          // Parse message
-          const messageData = JSON.parse(msg.content.toString())
+          messageData = JSON.parse(msg.content.toString())
+        } catch (parseError) {
+          logger.error('[AI-WORKER] ❌ Invalid message format - not valid JSON')
+          logger.error('Message content:', msg.content.toString())
+          logger.error('Parse error:', parseError)
+
+          // Reject invalid messages without requeue
+          channel.nack(msg, false, false)
+          return
+        }
+
+        try {
           const retryCount = msg.properties.headers?.['x-retry-count'] || 0
 
           logger.info(`[AI-WORKER] 📥 Received job: ${messageData.jobId} (attempt ${retryCount + 1})`)
@@ -144,11 +173,11 @@ export const createAIContentWorker = async () => {
           logger.info(`[AI-WORKER] ✅ Job ${messageData.jobId} completed successfully`)
 
         } catch (error) {
-          const messageData = JSON.parse(msg.content.toString())
           const retryCount = msg.properties.headers?.['x-retry-count'] || 0
           const maxRetries = 3
 
-          logger.error(`[AI-WORKER] ❌ Failed to process job ${messageData.jobId}:`, error)
+          const errorMessage = error instanceof Error ? error.message : String(error)
+          logger.error(`[AI-WORKER] ❌ Failed to process job ${messageData.jobId}: ${errorMessage}`, error)
 
           if (retryCount >= maxRetries) {
             // Max retries reached - mark as failed permanently

@@ -147,8 +147,22 @@ export const startVideoWorker = async () => {
       async (msg: ConsumeMessage | null) => {
         if (!msg) return
 
+        let messageData: any
+
+        // Try to parse message first - handle JSON parse errors
         try {
-          const messageData = JSON.parse(msg.content.toString())
+          messageData = JSON.parse(msg.content.toString())
+        } catch (parseError) {
+          logger.error('[VIDEO-WORKER] ❌ Invalid message format - not valid JSON')
+          logger.error('Message content:', msg.content.toString())
+          logger.error('Parse error:', parseError)
+
+          // Reject invalid messages without requeue
+          channel.nack(msg, false, false)
+          return
+        }
+
+        try {
           const retryCount = msg.properties.headers?.['x-retry-count'] || 0
 
           logger.info(`[VIDEO-WORKER] Processing job ${messageData.jobId} (attempt ${retryCount + 1})`)
@@ -159,11 +173,10 @@ export const startVideoWorker = async () => {
           channel.ack(msg)
           logger.info(`[VIDEO-WORKER] Job ${messageData.jobId} completed successfully`)
         } catch (error) {
-          const messageData = JSON.parse(msg.content.toString())
           const retryCount = msg.properties.headers?.['x-retry-count'] || 0
           const maxRetries = 3
 
-          logger.error(`[VIDEO-WORKER] Error processing job ${messageData.jobId}:`, error)
+          logger.error(`[VIDEO-WORKER] ❌ Error processing job ${messageData.jobId}:`, error)
 
           if (retryCount >= maxRetries) {
             // Max retries reached - mark as failed permanently
