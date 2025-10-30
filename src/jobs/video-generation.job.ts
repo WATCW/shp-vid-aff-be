@@ -149,23 +149,81 @@ export const startVideoWorker = async () => {
 
         try {
           const messageData = JSON.parse(msg.content.toString())
+          const retryCount = msg.properties.headers?.['x-retry-count'] || 0
+
+          logger.info(`[VIDEO-WORKER] Processing job ${messageData.jobId} (attempt ${retryCount + 1})`)
+
           await processVideoGenerationJob(messageData)
 
           // Acknowledge message on success
           channel.ack(msg)
+          logger.info(`[VIDEO-WORKER] Job ${messageData.jobId} completed successfully`)
         } catch (error) {
-          logger.error('[VIDEO-WORKER] Error processing message:', error)
-
-          // Reject and don't requeue if it's already been retried
+          const messageData = JSON.parse(msg.content.toString())
           const retryCount = msg.properties.headers?.['x-retry-count'] || 0
+          const maxRetries = 3
 
-          if (retryCount >= 3) {
-            logger.error(`[VIDEO-WORKER] Max retries reached for job, rejecting...`)
-            channel.nack(msg, false, false) // Don't requeue
+          logger.error(`[VIDEO-WORKER] Error processing job ${messageData.jobId}:`, error)
+
+          if (retryCount >= maxRetries) {
+            // Max retries reached - mark as failed permanently
+            logger.error(`[VIDEO-WORKER] Max retries (${maxRetries}) reached for job ${messageData.jobId}, marking as failed`)
+
+            // Update job in database as failed
+            try {
+              await Job.findOneAndUpdate(
+                { productId: messageData.productId, type: 'generate_video' },
+                {
+                  $set: {
+                    status: 'failed',
+                    error: error instanceof Error ? error.message : 'Unknown error',
+                    completedAt: new Date(),
+                  },
+                }
+              )
+
+              // Update video status as well
+              if (messageData.videoId) {
+                await Video.findByIdAndUpdate(messageData.videoId, {
+                  status: 'failed',
+                  error: error instanceof Error ? error.message : 'Video generation failed',
+                })
+              }
+            } catch (updateError) {
+              logger.error('[VIDEO-WORKER] Failed to update job/video status:', updateError)
+            }
+
+            // Don't requeue - message will be discarded
+            channel.nack(msg, false, false)
           } else {
-            logger.warn(`[VIDEO-WORKER] Retry ${retryCount + 1}/3 for job`)
-            // Requeue with retry count
-            channel.nack(msg, false, true)
+            // Retry - but we need to republish with updated retry count
+            logger.warn(`[VIDEO-WORKER] Retry ${retryCount + 1}/${maxRetries} for job ${messageData.jobId}`)
+
+            try {
+              // Publish new message with incremented retry count
+              const newHeaders = {
+                ...(msg.properties.headers || {}),
+                'x-retry-count': retryCount + 1,
+              }
+
+              channel.sendToQueue(
+                QUEUE_NAMES.VIDEO,
+                Buffer.from(msg.content.toString()),
+                {
+                  ...msg.properties,
+                  headers: newHeaders,
+                }
+              )
+
+              logger.info(`[VIDEO-WORKER] Requeued job ${messageData.jobId} with retry count ${retryCount + 1}`)
+
+              // Acknowledge original message (we've republished it)
+              channel.ack(msg)
+            } catch (requeueError) {
+              logger.error('[VIDEO-WORKER] Failed to requeue message:', requeueError)
+              // If requeue fails, nack without requeue to avoid infinite loop
+              channel.nack(msg, false, false)
+            }
           }
         }
       },

@@ -132,28 +132,76 @@ export const createAIContentWorker = async () => {
         try {
           // Parse message
           const messageData = JSON.parse(msg.content.toString())
+          const retryCount = msg.properties.headers?.['x-retry-count'] || 0
 
-          logger.info(`[AI-WORKER] 📥 Received job: ${messageData.jobId}`)
+          logger.info(`[AI-WORKER] 📥 Received job: ${messageData.jobId} (attempt ${retryCount + 1})`)
 
           // Process the job
           await processAIContentJob(messageData)
 
           // Acknowledge the message (job completed successfully)
           channel.ack(msg)
-          logger.info(`[AI-WORKER] ✅ Job ${messageData.jobId} acknowledged`)
+          logger.info(`[AI-WORKER] ✅ Job ${messageData.jobId} completed successfully`)
 
         } catch (error) {
-          logger.error(`[AI-WORKER] ❌ Failed to process message:`, error)
+          const messageData = JSON.parse(msg.content.toString())
+          const retryCount = msg.properties.headers?.['x-retry-count'] || 0
+          const maxRetries = 3
 
-          // Reject and requeue the message (for retry)
-          // You can set requeue to false if you don't want to retry
-          const shouldRequeue = false // Don't requeue on failure
-          channel.nack(msg, false, shouldRequeue)
+          logger.error(`[AI-WORKER] ❌ Failed to process job ${messageData.jobId}:`, error)
 
-          if (shouldRequeue) {
-            logger.info(`[AI-WORKER] Message requeued for retry`)
+          if (retryCount >= maxRetries) {
+            // Max retries reached - mark as failed permanently
+            logger.error(`[AI-WORKER] Max retries (${maxRetries}) reached for job ${messageData.jobId}, marking as failed`)
+
+            // Update job in database as failed
+            try {
+              await Job.findOneAndUpdate(
+                { productId: messageData.productId, type: 'ai_content' },
+                {
+                  $set: {
+                    status: 'failed',
+                    error: error instanceof Error ? error.message : 'Unknown error',
+                    completedAt: new Date(),
+                  },
+                }
+              )
+            } catch (updateError) {
+              logger.error('[AI-WORKER] Failed to update job status:', updateError)
+            }
+
+            // Don't requeue - message will be discarded
+            channel.nack(msg, false, false)
+            logger.info(`[AI-WORKER] Job ${messageData.jobId} permanently failed after ${maxRetries} attempts`)
           } else {
-            logger.info(`[AI-WORKER] Message rejected (not requeued)`)
+            // Retry - republish with updated retry count
+            logger.warn(`[AI-WORKER] Retry ${retryCount + 1}/${maxRetries} for job ${messageData.jobId}`)
+
+            try {
+              // Publish new message with incremented retry count
+              const newHeaders = {
+                ...(msg.properties.headers || {}),
+                'x-retry-count': retryCount + 1,
+              }
+
+              channel.sendToQueue(
+                QUEUE_NAMES.AI_CONTENT,
+                Buffer.from(msg.content.toString()),
+                {
+                  ...msg.properties,
+                  headers: newHeaders,
+                }
+              )
+
+              logger.info(`[AI-WORKER] Requeued job ${messageData.jobId} with retry count ${retryCount + 1}`)
+
+              // Acknowledge original message (we've republished it)
+              channel.ack(msg)
+            } catch (requeueError) {
+              logger.error('[AI-WORKER] Failed to requeue message:', requeueError)
+              // If requeue fails, nack without requeue to avoid infinite loop
+              channel.nack(msg, false, false)
+            }
           }
         }
       },
