@@ -106,8 +106,14 @@ const processVideoGenerationJob = async (messageData: VideoJobData & { jobId: st
       output: video.output,
     }
   } catch (error: any) {
-    logger.error(`[VIDEO-WORKER] ❌ Error generating video for product ${productId}:`, error)
-    logger.error(`[VIDEO-WORKER] 📚 Error stack:`, error.stack)
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    const errorStack = error instanceof Error ? error.stack : undefined
+
+    logger.error(`[VIDEO-WORKER] ❌ Error generating video for product ${productId}:`)
+    logger.error(`Error: ${errorMessage}`)
+    if (errorStack) {
+      logger.error(`Stack: ${errorStack}`)
+    }
 
     // Try to get product for MongoDB ObjectId
     try {
@@ -197,9 +203,12 @@ export const startVideoWorker = async () => {
         } catch (error) {
           const retryCount = msg.properties.headers?.['x-retry-count'] || 0
           const maxRetries = 3
+          const errorMessage = error instanceof Error ? error.message : String(error)
 
-          logger.error(`[VIDEO-WORKER] ❌ Error processing job ${messageData.jobId}:`, error)
-          logger.error(`[VIDEO-WORKER] 📚 Full error:`, error instanceof Error ? error.stack : error)
+          logger.error(`[VIDEO-WORKER] ❌ Error processing job ${messageData.jobId}: ${errorMessage}`)
+          if (error instanceof Error && error.stack) {
+            logger.error(`[VIDEO-WORKER] 📚 Stack trace:`, error.stack)
+          }
 
           if (retryCount >= maxRetries) {
             // Max retries reached - mark as failed permanently
