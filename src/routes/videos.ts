@@ -170,6 +170,17 @@ export const videoRoutes = new Elysia({ prefix: '/videos' })
           name: product.name,
         })
 
+        // Validate product has AI content
+        if (!product.aiContent) {
+          logger.error('[VIDEO-GEN] ❌ Product does not have AI content:', {
+            productId: product.productId,
+            name: product.name,
+          })
+          throw new Error('Product must have AI content generated before video can be created')
+        }
+
+        logger.info('[VIDEO-GEN] ✅ Product has AI content')
+
         // Create video ID
         const videoId = nanoid()
 
