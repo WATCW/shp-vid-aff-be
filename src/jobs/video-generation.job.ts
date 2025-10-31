@@ -16,16 +16,7 @@ const processVideoGenerationJob = async (messageData: VideoJobData & { jobId: st
   logger.info(`[VIDEO-WORKER] Processing job ${jobId} for video: ${videoId}`)
 
   try {
-    // Update job status
-    await Job.findOneAndUpdate(
-      { productId, type: 'generate_video', status: { $ne: 'completed' } },
-      {
-        $set: { status: 'active', startedAt: new Date() },
-        $inc: { attempts: 1 },
-      }
-    )
-
-    // Get product
+    // Get product first (productId is Shopify ID string, not MongoDB ObjectId)
     const product = await Product.findOne({ productId })
 
     if (!product) {
@@ -36,10 +27,19 @@ const processVideoGenerationJob = async (messageData: VideoJobData & { jobId: st
       throw new Error(`Product ${productId} does not have AI content`)
     }
 
+    // Update job status using MongoDB ObjectId
+    await Job.findOneAndUpdate(
+      { productId: product._id, type: 'generate_video', status: { $ne: 'completed' } },
+      {
+        $set: { status: 'active', startedAt: new Date() },
+        $inc: { attempts: 1 },
+      }
+    )
+
     // Update progress
     const updateProgress = async (progress: number) => {
       await Job.findOneAndUpdate(
-        { productId, type: 'generate_video', status: 'active' },
+        { productId: product._id, type: 'generate_video', status: 'active' },
         { $set: { progress } }
       )
 
@@ -65,9 +65,9 @@ const processVideoGenerationJob = async (messageData: VideoJobData & { jobId: st
       updateProgress
     )
 
-    // Update job record
+    // Update job record using MongoDB ObjectId
     await Job.findOneAndUpdate(
-      { productId, type: 'generate_video', status: 'active' },
+      { productId: product._id, type: 'generate_video', status: 'active' },
       {
         $set: {
           status: 'completed',
@@ -94,17 +94,25 @@ const processVideoGenerationJob = async (messageData: VideoJobData & { jobId: st
   } catch (error: any) {
     logger.error(`[VIDEO-WORKER] L Error generating video ${videoId}:`, error)
 
-    // Update job as failed
-    await Job.findOneAndUpdate(
-      { productId, type: 'generate_video' },
-      {
-        $set: {
-          status: 'failed',
-          error: error.message || 'Video generation failed',
-          completedAt: new Date(),
-        },
+    // Try to get product for MongoDB ObjectId
+    try {
+      const product = await Product.findOne({ productId })
+      if (product) {
+        // Update job as failed using MongoDB ObjectId
+        await Job.findOneAndUpdate(
+          { productId: product._id, type: 'generate_video' },
+          {
+            $set: {
+              status: 'failed',
+              error: error.message || 'Video generation failed',
+              completedAt: new Date(),
+            },
+          }
+        )
       }
-    )
+    } catch (updateError) {
+      logger.error('[VIDEO-WORKER] Failed to update job status:', updateError)
+    }
 
     // Update video record as failed
     await Video.findById(videoId).then((video) => {
@@ -184,16 +192,20 @@ export const startVideoWorker = async () => {
 
             // Update job in database as failed
             try {
-              await Job.findOneAndUpdate(
-                { productId: messageData.productId, type: 'generate_video' },
-                {
-                  $set: {
-                    status: 'failed',
-                    error: error instanceof Error ? error.message : 'Unknown error',
-                    completedAt: new Date(),
-                  },
-                }
-              )
+              // Get product to use its MongoDB _id
+              const product = await Product.findOne({ productId: messageData.productId })
+              if (product) {
+                await Job.findOneAndUpdate(
+                  { productId: product._id, type: 'generate_video' },
+                  {
+                    $set: {
+                      status: 'failed',
+                      error: error instanceof Error ? error.message : 'Unknown error',
+                      completedAt: new Date(),
+                    },
+                  }
+                )
+              }
 
               // Update video status as well
               if (messageData.videoId) {

@@ -16,9 +16,16 @@ const processAIContentJob = async (messageData: AIContentJobData & { jobId: stri
   logger.info(`[AI-WORKER] Processing job ${jobId} for product: ${productId}`)
 
   try {
-    // Update job status
+    // Get product first (productId is Shopify ID string, not MongoDB ObjectId)
+    const product = await Product.findOne({ productId })
+
+    if (!product) {
+      throw new Error(`Product not found: ${productId}`)
+    }
+
+    // Update job status using MongoDB ObjectId
     await Job.findOneAndUpdate(
-      { productId, type: 'ai_content', status: { $ne: 'completed' } },
+      { productId: product._id, type: 'ai_content', status: { $ne: 'completed' } },
       {
         $set: { status: 'active', startedAt: new Date() },
         $inc: { attempts: 1 },
@@ -31,16 +38,9 @@ const processAIContentJob = async (messageData: AIContentJobData & { jobId: stri
       { $set: { status: 'ai_processing' } }
     )
 
-    // Get product
-    const product = await Product.findOne({ productId })
-
-    if (!product) {
-      throw new Error(`Product not found: ${productId}`)
-    }
-
     // Update progress in DB
     await Job.findOneAndUpdate(
-      { productId, type: 'ai_content', status: 'active' },
+      { productId: product._id, type: 'ai_content', status: 'active' },
       { $set: { progress: 20 } }
     )
 
@@ -50,7 +50,7 @@ const processAIContentJob = async (messageData: AIContentJobData & { jobId: stri
 
     // Update progress
     await Job.findOneAndUpdate(
-      { productId, type: 'ai_content', status: 'active' },
+      { productId: product._id, type: 'ai_content', status: 'active' },
       { $set: { progress: 80 } }
     )
 
@@ -61,7 +61,7 @@ const processAIContentJob = async (messageData: AIContentJobData & { jobId: stri
 
     // Update job record
     await Job.findOneAndUpdate(
-      { productId, type: 'ai_content', status: 'active' },
+      { productId: product._id, type: 'ai_content', status: 'active' },
       {
         $set: {
           status: 'completed',
@@ -102,16 +102,20 @@ const processAIContentJob = async (messageData: AIContentJobData & { jobId: stri
 
     // Update job record
     try {
-      await Job.findOneAndUpdate(
-        { productId, type: 'ai_content', status: 'active' },
-        {
-          $set: {
-            status: 'failed',
-            error: errorMessage,
-            completedAt: new Date(),
-          },
-        }
-      )
+      // Try to get product to use its MongoDB _id
+      const product = await Product.findOne({ productId })
+      if (product) {
+        await Job.findOneAndUpdate(
+          { productId: product._id, type: 'ai_content', status: 'active' },
+          {
+            $set: {
+              status: 'failed',
+              error: errorMessage,
+              completedAt: new Date(),
+            },
+          }
+        )
+      }
     } catch (updateError) {
       logger.error('[AI-WORKER] Failed to update job status:', updateError)
     }
@@ -185,16 +189,20 @@ export const createAIContentWorker = async () => {
 
             // Update job in database as failed
             try {
-              await Job.findOneAndUpdate(
-                { productId: messageData.productId, type: 'ai_content' },
-                {
-                  $set: {
-                    status: 'failed',
-                    error: error instanceof Error ? error.message : 'Unknown error',
-                    completedAt: new Date(),
-                  },
-                }
-              )
+              // Get product to use its MongoDB _id
+              const product = await Product.findOne({ productId: messageData.productId })
+              if (product) {
+                await Job.findOneAndUpdate(
+                  { productId: product._id, type: 'ai_content' },
+                  {
+                    $set: {
+                      status: 'failed',
+                      error: error instanceof Error ? error.message : 'Unknown error',
+                      completedAt: new Date(),
+                    },
+                  }
+                )
+              }
             } catch (updateError) {
               logger.error('[AI-WORKER] Failed to update job status:', updateError)
             }
