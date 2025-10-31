@@ -39,7 +39,6 @@ const processVideoGenerationJob = async (messageData: VideoJobData & { jobId: st
     }
 
     // Update job status using MongoDB ObjectId
-    logger.info(`[VIDEO-WORKER] 💾 Updating job status to active...`)
     await Job.findOneAndUpdate(
       { productId: product._id, type: 'generate_video', status: { $ne: 'completed' } },
       {
@@ -65,13 +64,7 @@ const processVideoGenerationJob = async (messageData: VideoJobData & { jobId: st
     }
 
     // Generate video with progress callback
-    logger.info(`[VIDEO-WORKER] 🎨 Starting video generation for product: ${productId}`)
-    logger.info(`[VIDEO-WORKER] 📝 Video config:`, {
-      productMongoId: product._id.toString(),
-      templateId,
-      musicId: customConfig?.musicId,
-      customTextLength: customConfig?.customText?.length
-    })
+    logger.info(`[VIDEO-WORKER] Generating video for product: ${productId}`)
 
     const video = await videoGeneratorService.generateVideo(
       {
@@ -83,10 +76,7 @@ const processVideoGenerationJob = async (messageData: VideoJobData & { jobId: st
       updateProgress
     )
 
-    logger.info(`[VIDEO-WORKER] ✅ Video file generated successfully!`)
-
     // Update job record using MongoDB ObjectId
-    logger.info(`[VIDEO-WORKER] 💾 Updating job status to completed...`)
     await Job.findOneAndUpdate(
       { productId: product._id, type: 'generate_video', status: 'active' },
       {
@@ -104,7 +94,7 @@ const processVideoGenerationJob = async (messageData: VideoJobData & { jobId: st
       }
     )
 
-    logger.info(`[VIDEO-WORKER] 🎉 Job ${jobId} completed successfully for video ${videoId}!`)
+    logger.info(`[VIDEO-WORKER]  Video generated successfully: ${videoId}`)
 
     return {
       success: true,
@@ -113,8 +103,7 @@ const processVideoGenerationJob = async (messageData: VideoJobData & { jobId: st
       output: video.output,
     }
   } catch (error: any) {
-    logger.error(`[VIDEO-WORKER] ❌ Error generating video ${videoId}:`, error)
-    logger.error(`[VIDEO-WORKER] 📚 Error stack:`, error.stack)
+    logger.error(`[VIDEO-WORKER] L Error generating video ${videoId}:`, error)
 
     // Try to get product for MongoDB ObjectId
     try {
@@ -154,14 +143,14 @@ const processVideoGenerationJob = async (messageData: VideoJobData & { jobId: st
  */
 export const startVideoWorker = async () => {
   if (!rabbitmqAvailable) {
-    logger.warn('⚠️  RabbitMQ not available - Video worker disabled')
+    logger.warn('�  RabbitMQ not available - Video worker disabled')
     return
   }
 
   const channel = getChannel()
 
   if (!channel) {
-    logger.error('❌ Cannot start video worker - No RabbitMQ channel')
+    logger.error('L Cannot start video worker - No RabbitMQ channel')
     return
   }
 
@@ -169,7 +158,7 @@ export const startVideoWorker = async () => {
     // Set prefetch to 1 (process one job at a time per worker)
     await channel.prefetch(1)
 
-    logger.info(`✅ Video generation worker started - Listening on queue: ${QUEUE_NAMES.VIDEO}`)
+    logger.info(`<� Video generation worker started - Listening on queue: ${QUEUE_NAMES.VIDEO}`)
 
     // Start consuming messages
     await channel.consume(
@@ -181,16 +170,11 @@ export const startVideoWorker = async () => {
 
         // Try to parse message first - handle JSON parse errors
         try {
-          const rawContent = msg.content.toString()
-          logger.info('[VIDEO-WORKER] 📨 Received message, parsing...')
-          logger.info('[VIDEO-WORKER] 📝 Raw content:', rawContent)
-
-          messageData = JSON.parse(rawContent)
-          logger.info('[VIDEO-WORKER] ✅ Message parsed successfully:', messageData)
+          messageData = JSON.parse(msg.content.toString())
         } catch (parseError) {
           logger.error('[VIDEO-WORKER] ❌ Invalid message format - not valid JSON')
-          logger.error('[VIDEO-WORKER] 📄 Message content:', msg.content.toString())
-          logger.error('[VIDEO-WORKER] 🔴 Parse error:', parseError)
+          logger.error('Message content:', msg.content.toString())
+          logger.error('Parse error:', parseError)
 
           // Reject invalid messages without requeue
           channel.nack(msg, false, false)
@@ -200,23 +184,22 @@ export const startVideoWorker = async () => {
         try {
           const retryCount = msg.properties.headers?.['x-retry-count'] || 0
 
-          logger.info(`[VIDEO-WORKER] 🔄 Processing job ${messageData.jobId} (attempt ${retryCount + 1})`)
+          logger.info(`[VIDEO-WORKER] Processing job ${messageData.jobId} (attempt ${retryCount + 1})`)
 
           await processVideoGenerationJob(messageData)
 
           // Acknowledge message on success
           channel.ack(msg)
-          logger.info(`[VIDEO-WORKER] ✅ Job ${messageData.jobId} completed successfully`)
+          logger.info(`[VIDEO-WORKER] Job ${messageData.jobId} completed successfully`)
         } catch (error) {
           const retryCount = msg.properties.headers?.['x-retry-count'] || 0
           const maxRetries = 3
 
           logger.error(`[VIDEO-WORKER] ❌ Error processing job ${messageData.jobId}:`, error)
-          logger.error(`[VIDEO-WORKER] 📚 Full error:`, error instanceof Error ? error.stack : error)
 
           if (retryCount >= maxRetries) {
             // Max retries reached - mark as failed permanently
-            logger.error(`[VIDEO-WORKER] 🚫 Max retries (${maxRetries}) reached for job ${messageData.jobId}, marking as failed`)
+            logger.error(`[VIDEO-WORKER] Max retries (${maxRetries}) reached for job ${messageData.jobId}, marking as failed`)
 
             // Update job in database as failed
             try {
@@ -233,7 +216,6 @@ export const startVideoWorker = async () => {
                     },
                   }
                 )
-                logger.info(`[VIDEO-WORKER] 💾 Job status updated to failed in database`)
               }
 
               // Update video status as well
@@ -242,18 +224,16 @@ export const startVideoWorker = async () => {
                   status: 'failed',
                   error: error instanceof Error ? error.message : 'Video generation failed',
                 })
-                logger.info(`[VIDEO-WORKER] 💾 Video status updated to failed in database`)
               }
             } catch (updateError) {
-              logger.error('[VIDEO-WORKER] ❌ Failed to update job/video status:', updateError)
+              logger.error('[VIDEO-WORKER] Failed to update job/video status:', updateError)
             }
 
-            logger.info(`[VIDEO-WORKER] 🗑️  Discarding message (no requeue)`)
             // Don't requeue - message will be discarded
             channel.nack(msg, false, false)
           } else {
             // Retry - but we need to republish with updated retry count
-            logger.warn(`[VIDEO-WORKER] 🔄 Retry ${retryCount + 1}/${maxRetries} for job ${messageData.jobId}`)
+            logger.warn(`[VIDEO-WORKER] Retry ${retryCount + 1}/${maxRetries} for job ${messageData.jobId}`)
 
             try {
               // Publish new message with incremented retry count
@@ -264,19 +244,19 @@ export const startVideoWorker = async () => {
 
               channel.sendToQueue(
                 QUEUE_NAMES.VIDEO,
-                msg.content,
+                Buffer.from(msg.content.toString()),
                 {
                   ...msg.properties,
                   headers: newHeaders,
                 }
               )
 
-              logger.info(`[VIDEO-WORKER] ✅ Requeued job ${messageData.jobId} with retry count ${retryCount + 1}`)
+              logger.info(`[VIDEO-WORKER] Requeued job ${messageData.jobId} with retry count ${retryCount + 1}`)
 
               // Acknowledge original message (we've republished it)
               channel.ack(msg)
             } catch (requeueError) {
-              logger.error('[VIDEO-WORKER] ❌ Failed to requeue message:', requeueError)
+              logger.error('[VIDEO-WORKER] Failed to requeue message:', requeueError)
               // If requeue fails, nack without requeue to avoid infinite loop
               channel.nack(msg, false, false)
             }
@@ -288,7 +268,7 @@ export const startVideoWorker = async () => {
       }
     )
   } catch (error) {
-    logger.error('❌ Failed to start video worker:', error)
+    logger.error('L Failed to start video worker:', error)
   }
 }
 
