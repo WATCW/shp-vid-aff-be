@@ -11,10 +11,10 @@ import logger from '@utils/logger'
  * Process video generation job from RabbitMQ message
  */
 const processVideoGenerationJob = async (messageData: VideoJobData & { jobId: string; timestamp: string }) => {
-  const { productId, videoId, templateId, customConfig, jobId } = messageData
+  const { productId, templateId, customConfig, jobId } = messageData
 
-  logger.info(`[VIDEO-WORKER] 🎬 Processing job ${jobId} for video: ${videoId}`)
-  logger.info(`[VIDEO-WORKER] 📦 Job data:`, { productId, videoId, templateId, customConfig })
+  logger.info(`[VIDEO-WORKER] 🎬 Processing job ${jobId} for product: ${productId}`)
+  logger.info(`[VIDEO-WORKER] 📦 Job data:`, { productId, templateId, customConfig })
 
   try {
     // Get product first (productId is Shopify ID string, not MongoDB ObjectId)
@@ -54,14 +54,7 @@ const processVideoGenerationJob = async (messageData: VideoJobData & { jobId: st
         { productId: product._id, type: 'generate_video', status: 'active' },
         { $set: { progress } }
       )
-
-      // Also update video record progress
-      await Video.findById(videoId).then((video) => {
-        if (video) {
-          video.progress = progress
-          return video.save()
-        }
-      })
+      logger.info(`[VIDEO-WORKER] 📊 Progress updated: ${progress}%`)
     }
 
     // Generate video with progress callback
@@ -104,7 +97,7 @@ const processVideoGenerationJob = async (messageData: VideoJobData & { jobId: st
       }
     )
 
-    logger.info(`[VIDEO-WORKER] 🎉 Job ${jobId} completed successfully for video ${videoId}!`)
+    logger.info(`[VIDEO-WORKER] 🎉 Job ${jobId} completed successfully! Video ID: ${video._id}`)
 
     return {
       success: true,
@@ -113,7 +106,7 @@ const processVideoGenerationJob = async (messageData: VideoJobData & { jobId: st
       output: video.output,
     }
   } catch (error: any) {
-    logger.error(`[VIDEO-WORKER] ❌ Error generating video ${videoId}:`, error)
+    logger.error(`[VIDEO-WORKER] ❌ Error generating video for product ${productId}:`, error)
     logger.error(`[VIDEO-WORKER] 📚 Error stack:`, error.stack)
 
     // Try to get product for MongoDB ObjectId
@@ -136,14 +129,8 @@ const processVideoGenerationJob = async (messageData: VideoJobData & { jobId: st
       logger.error('[VIDEO-WORKER] Failed to update job status:', updateError)
     }
 
-    // Update video record as failed
-    await Video.findById(videoId).then((video) => {
-      if (video) {
-        video.status = 'failed'
-        video.error = error.message || 'Video generation failed'
-        return video.save()
-      }
-    })
+    // Note: Video document may not exist yet if error occurred before video service created it
+    // The video service handles its own error states internally
 
     throw error
   }
@@ -235,17 +222,8 @@ export const startVideoWorker = async () => {
                 )
                 logger.info(`[VIDEO-WORKER] 💾 Job status updated to failed in database`)
               }
-
-              // Update video status as well
-              if (messageData.videoId) {
-                await Video.findByIdAndUpdate(messageData.videoId, {
-                  status: 'failed',
-                  error: error instanceof Error ? error.message : 'Video generation failed',
-                })
-                logger.info(`[VIDEO-WORKER] 💾 Video status updated to failed in database`)
-              }
             } catch (updateError) {
-              logger.error('[VIDEO-WORKER] ❌ Failed to update job/video status:', updateError)
+              logger.error('[VIDEO-WORKER] ❌ Failed to update job status:', updateError)
             }
 
             logger.info(`[VIDEO-WORKER] 🗑️  Discarding message (no requeue)`)

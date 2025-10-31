@@ -23,7 +23,6 @@ export interface ScraperJobData {
 
 export interface VideoJobData {
   productId: string
-  videoId: string
   templateId?: string
   customConfig?: Record<string, any>
 }
@@ -141,7 +140,6 @@ export const addVideoJob = async (
 ): Promise<string | null> => {
   logger.info('[QUEUE] 🎬 Attempting to add video job:', {
     productId: data.productId,
-    videoId: data.videoId,
     templateId: data.templateId,
     queuesInitialized,
   })
@@ -151,7 +149,7 @@ export const addVideoJob = async (
     return null
   }
 
-  const jobId = `video-${data.videoId}-${Date.now()}`
+  const jobId = `video-${data.productId}-${Date.now()}`
 
   logger.info('[QUEUE] 📤 Publishing to queue:', { jobId, queueName: QUEUE_NAMES.VIDEO })
 
