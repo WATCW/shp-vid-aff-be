@@ -155,7 +155,15 @@ export class VideoGeneratorService {
 
       return video
     } catch (error) {
-      logger.error('Error generating video:', error)
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      const errorStack = error instanceof Error ? error.stack : undefined
+
+      logger.error('Error generating video:')
+      logger.error(`Message: ${errorMessage}`)
+      if (errorStack) {
+        logger.error(`Stack: ${errorStack}`)
+      }
+
       throw error
     }
   }
@@ -336,7 +344,12 @@ export class VideoGeneratorService {
           resolve(outputPath)
         })
         .on('error', (err) => {
-          logger.error('FFmpeg error:', err)
+          const errorMessage = err instanceof Error ? err.message : String(err)
+          logger.error('FFmpeg error:')
+          logger.error(`Message: ${errorMessage}`)
+          if (err instanceof Error && err.stack) {
+            logger.error(`Stack: ${err.stack}`)
+          }
           reject(err)
         })
         .run()
@@ -361,7 +374,12 @@ export class VideoGeneratorService {
           resolve(thumbnailPath)
         })
         .on('error', (err) => {
-          logger.error('Error generating thumbnail:', err)
+          const errorMessage = err instanceof Error ? err.message : String(err)
+          logger.error('Error generating thumbnail:')
+          logger.error(`Message: ${errorMessage}`)
+          if (err instanceof Error && err.stack) {
+            logger.error(`Stack: ${err.stack}`)
+          }
           reject(err)
         })
     })
