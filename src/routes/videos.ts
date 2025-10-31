@@ -156,14 +156,28 @@ export const videoRoutes = new Elysia({ prefix: '/videos' })
           customTextLength: customText?.length,
         })
 
+        // Get product to validate and retrieve Shopify productId
+        const { Product } = await import('@models/product.model')
+        const product = await Product.findById(productId)
+
+        if (!product) {
+          throw new Error(`Product not found: ${productId}`)
+        }
+
+        logger.info('[VIDEO-GEN] ✅ Product found:', {
+          mongoId: product._id,
+          shopifyId: product.productId,
+          name: product.name,
+        })
+
         // Create video ID
         const videoId = nanoid()
 
         logger.info('[VIDEO-GEN] 🆔 Generated video ID:', videoId)
 
-        // Create job record
+        // Create job record with MongoDB ObjectId
         const job = new Job({
-          productId,
+          productId: product._id,
           type: 'generate_video',
           status: 'waiting',
           progress: 0,
@@ -172,9 +186,9 @@ export const videoRoutes = new Elysia({ prefix: '/videos' })
         await job.save()
         logger.info('[VIDEO-GEN] 💾 Job record saved:', job._id)
 
-        // Add to queue
+        // Add to queue with Shopify productId (string)
         const jobId = await addVideoJob({
-          productId,
+          productId: product.productId,
           videoId,
           templateId,
           customConfig: {
