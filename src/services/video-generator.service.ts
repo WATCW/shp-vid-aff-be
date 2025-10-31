@@ -181,6 +181,18 @@ export class VideoGeneratorService {
     const textSlides = customText || product.aiContent?.keyPoints || []
     const sceneDuration = template.config.imageEffects.displayTime
 
+    logger.info('[VIDEO-GEN] Preparing scenes:', {
+      productId: product.productId,
+      imagesCount: images.length,
+      textSlidesCount: textSlides.length,
+      firstImage: images[0],
+    })
+
+    // Validate we have images
+    if (images.length === 0) {
+      throw new Error('Product has no images. Cannot generate video.')
+    }
+
     // Create scenes from images with text overlays
     const maxScenes = Math.min(images.length, textSlides.length)
 
@@ -219,9 +231,20 @@ export class VideoGeneratorService {
     const { resolution } = template.config.videoSettings
     const { filter } = template.config.imageEffects
 
+    logger.info('[VIDEO-GEN] Processing scenes:', {
+      sceneCount: scenes.length,
+      resolution: `${resolution.width}x${resolution.height}`,
+      filter,
+    })
+
     for (let i = 0; i < scenes.length; i++) {
       const scene = scenes[i]
       const outputPath = join(this.tempPath, `scene-${i}-${nanoid()}.png`)
+
+      logger.info(`[VIDEO-GEN] Processing scene ${i + 1}/${scenes.length}:`, {
+        imageSource: scene.image?.substring(0, 100) || 'no-image',
+        text: scene.text?.substring(0, 50) || 'no-text',
+      })
 
       try {
         let imageProcessor = sharp(scene.image)
@@ -237,13 +260,21 @@ export class VideoGeneratorService {
 
         await imageProcessor.toFile(outputPath)
 
+        logger.info(`[VIDEO-GEN] Scene ${i + 1} processed successfully: ${outputPath}`)
         processedPaths.push(outputPath)
       } catch (error) {
-        logger.error(`Error processing scene ${i}:`, error)
-        throw error
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        logger.error(`[VIDEO-GEN] Error processing scene ${i}:`)
+        logger.error(`Scene image: ${scene.image}`)
+        logger.error(`Error message: ${errorMessage}`)
+        if (error instanceof Error && error.stack) {
+          logger.error(`Stack: ${error.stack}`)
+        }
+        throw new Error(`Failed to process scene ${i}: ${errorMessage}`)
       }
     }
 
+    logger.info(`[VIDEO-GEN] All ${processedPaths.length} scenes processed successfully`)
     return processedPaths
   }
 
@@ -281,11 +312,33 @@ export class VideoGeneratorService {
 
     // Create input file list for FFmpeg
     const inputListPath = join(this.tempPath, `input-${videoId}.txt`)
+
+    logger.info('[VIDEO-GEN] Creating FFmpeg input list:', {
+      inputListPath,
+      sceneCount: scenePaths.length,
+      sceneDuration,
+      firstScene: scenePaths[0],
+    })
+
+    // Validate we have scenes
+    if (scenePaths.length === 0) {
+      throw new Error('No processed scenes available. Cannot create video.')
+    }
+
     const inputListContent = scenePaths
       .map((path) => `file '${path}'\nduration ${sceneDuration}`)
       .join('\n')
 
+    logger.info('[VIDEO-GEN] Input file content preview:', inputListContent.substring(0, 200))
+
     writeFileSync(inputListPath, inputListContent)
+
+    // Verify file was written
+    if (!existsSync(inputListPath)) {
+      throw new Error(`Failed to create input list file at: ${inputListPath}`)
+    }
+
+    logger.info('[VIDEO-GEN] Input list file created successfully')
 
     return new Promise((resolve, reject) => {
       let command = ffmpeg()
