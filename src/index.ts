@@ -13,6 +13,7 @@ import { initializeData } from './scripts/init-data'
 // Import routes
 import { uploadRoutes } from './routes/upload'
 import { productRoutes } from './routes/products'
+import { productImagesRoutes } from './routes/product-images'
 import { aiRoutes } from './routes/ai'
 import { videoRoutes } from './routes/videos'
 import { templateRoutes } from './routes/templates'
@@ -136,6 +137,7 @@ const startServer = async () => {
         app
           .use(uploadRoutes)
           .use(productRoutes)
+          .use(productImagesRoutes)
           .use(aiRoutes)
           .use(videoRoutes)
           .use(templateRoutes)

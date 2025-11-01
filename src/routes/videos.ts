@@ -1,5 +1,6 @@
 import { Elysia, t } from 'elysia'
 import videoGeneratorService from '@services/video-generator.service'
+import imageFallbackService from '@services/image-fallback.service'
 import { addVideoJob } from '@jobs/queue'
 import Video from '@models/video.model'
 import { Job } from '@models/job.model'
@@ -180,17 +181,20 @@ export const videoRoutes = new Elysia({ prefix: '/videos' })
 
         logger.info('[VIDEO-GEN] ✅ Product has AI content')
 
-        // Validate product has images
-        if (!product.images || product.images.length === 0) {
-          logger.error('[VIDEO-GEN] ❌ Product has no images:', {
+        // Try to ensure product has images (fallback if needed)
+        logger.info('[VIDEO-GEN] 🔍 Checking/fetching product images...')
+        const productImages = await imageFallbackService.ensureProductHasImages(product._id.toString())
+
+        if (!productImages || productImages.length === 0) {
+          // All fallback strategies failed - manual upload required
+          logger.error('[VIDEO-GEN] ❌ No images available and fallback strategies failed:', {
             productId: product.productId,
             name: product.name,
-            images: product.images,
           })
-          throw new Error('Product must have at least one image to generate video')
+          throw new Error('Product has no images and automatic image fetching failed. Please upload images manually.')
         }
 
-        logger.info('[VIDEO-GEN] ✅ Product has images:', product.images.length)
+        logger.info('[VIDEO-GEN] ✅ Product has images:', productImages.length)
 
         // Add to queue first to get jobId (same pattern as AI content)
         const jobId = await addVideoJob({

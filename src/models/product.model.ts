@@ -18,6 +18,13 @@ export interface IScrapedData {
   scrapedAt: Date
 }
 
+export interface IFallbackImages {
+  images: string[]
+  source: 'search' | 'ai_generated' | 'manual_upload'
+  searchQuery?: string
+  generatedAt: Date
+}
+
 export interface IProduct extends Document {
   productId: string
   name: string
@@ -31,6 +38,7 @@ export interface IProduct extends Document {
 
   aiContent?: IAIContent
   scrapedData?: IScrapedData
+  fallbackImages?: IFallbackImages
 
   status: 'pending' | 'ai_processing' | 'ready' | 'video_generating' | 'completed' | 'failed'
 
@@ -54,6 +62,17 @@ const ScrapedDataSchema = new Schema<IScrapedData>({
   category: { type: String },
   attributes: { type: Schema.Types.Mixed },
   scrapedAt: { type: Date, default: Date.now },
+}, { _id: false })
+
+const FallbackImagesSchema = new Schema<IFallbackImages>({
+  images: [{ type: String }],
+  source: {
+    type: String,
+    enum: ['search', 'ai_generated', 'manual_upload'],
+    required: true
+  },
+  searchQuery: { type: String },
+  generatedAt: { type: Date, default: Date.now },
 }, { _id: false })
 
 const ProductSchema = new Schema<IProduct>({
@@ -102,6 +121,7 @@ const ProductSchema = new Schema<IProduct>({
 
   aiContent: AIContentSchema,
   scrapedData: ScrapedDataSchema,
+  fallbackImages: FallbackImagesSchema,
 
   status: {
     type: String,

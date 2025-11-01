@@ -177,13 +177,24 @@ export class VideoGeneratorService {
     customText?: string[]
   ): Promise<VideoScene[]> {
     const scenes: VideoScene[] = []
-    const images = product.images || []
+
+    // Collect all available images (scraped + fallback)
+    const images: string[] = []
+    if (product.images && product.images.length > 0) {
+      images.push(...product.images)
+    }
+    if (product.fallbackImages?.images && product.fallbackImages.images.length > 0) {
+      images.push(...product.fallbackImages.images)
+    }
+
     const textSlides = customText || product.aiContent?.keyPoints || []
     const sceneDuration = template.config.imageEffects.displayTime
 
     logger.info('[VIDEO-GEN] Preparing scenes:', {
       productId: product.productId,
-      imagesCount: images.length,
+      scrapedImagesCount: product.images?.length || 0,
+      fallbackImagesCount: product.fallbackImages?.images?.length || 0,
+      totalImagesCount: images.length,
       textSlidesCount: textSlides.length,
       firstImage: images[0],
     })
