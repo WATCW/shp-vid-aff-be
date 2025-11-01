@@ -248,8 +248,17 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
       try {
         logger.info(`[AI] Getting status for job: ${params.jobId}`)
 
-        // Query by jobId field (not MongoDB _id)
-        const dbJob = await Job.findOne({ jobId: params.jobId })
+        // Try to find by custom jobId first, then fallback to MongoDB _id for old jobs
+        let dbJob = await Job.findOne({ jobId: params.jobId })
+
+        // If not found by jobId, try by MongoDB _id (for backward compatibility)
+        if (!dbJob) {
+          try {
+            dbJob = await Job.findById(params.jobId)
+          } catch (e) {
+            // Invalid ObjectId format, ignore
+          }
+        }
 
         if (!dbJob) {
           logger.warn(`[AI] Job not found: ${params.jobId}`)
