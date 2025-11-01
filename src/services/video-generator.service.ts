@@ -3,6 +3,7 @@ import sharp from 'sharp'
 import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { nanoid } from 'nanoid'
+import axios from 'axios'
 import logger from '@utils/logger'
 import Video, { IVideo } from '@models/video.model'
 import Template, { ITemplate } from '@models/template.model'
@@ -233,20 +234,36 @@ export class VideoGeneratorService {
   }
 
   /**
+   * Download image from URL to Buffer
+   */
+  private async downloadImageToBuffer(url: string): Promise<Buffer> {
+    try {
+      logger.info(`[VIDEO-GEN] Downloading image from URL: ${url.substring(0, 100)}...`)
+      const response = await axios.get(url, {
+        responseType: 'arraybuffer',
+        timeout: 30000, // 30 second timeout
+      })
+      const buffer = Buffer.from(response.data)
+      logger.info(`[VIDEO-GEN] Successfully downloaded ${buffer.length} bytes`)
+      return buffer
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      logger.error(`[VIDEO-GEN] Failed to download image from URL: ${url}`)
+      logger.error(`[VIDEO-GEN] Error: ${errorMessage}`)
+      throw new Error(`Failed to download image from URL: ${errorMessage}`)
+    }
+  }
+
+  /**
    * Convert image URL to local file path
    */
   private resolveImagePath(imagePath: string): string {
-    // If it's a URL, return as-is (sharp can handle URLs)
-    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
-      return imagePath
-    }
-
     // If it starts with /uploads or /storage, prepend ./storage
     if (imagePath.startsWith('/uploads') || imagePath.startsWith('/storage')) {
       return join(process.cwd(), 'storage', imagePath.replace(/^\//, ''))
     }
 
-    // Otherwise assume it's already a full path
+    // Otherwise assume it's already a full path or URL
     return imagePath
   }
 
@@ -281,11 +298,23 @@ export class VideoGeneratorService {
       })
 
       try {
-        let imageProcessor = sharp(resolvedImagePath)
-          .resize(resolution.width, resolution.height, {
-            fit: 'cover',
-            position: 'center',
-          })
+        let imageProcessor: sharp.Sharp
+
+        // Check if the image is a URL that needs to be downloaded
+        if (resolvedImagePath.startsWith('http://') || resolvedImagePath.startsWith('https://')) {
+          // Download the image to a Buffer first
+          const imageBuffer = await this.downloadImageToBuffer(resolvedImagePath)
+          imageProcessor = sharp(imageBuffer)
+        } else {
+          // Use local file path
+          imageProcessor = sharp(resolvedImagePath)
+        }
+
+        // Resize and process
+        imageProcessor = imageProcessor.resize(resolution.width, resolution.height, {
+          fit: 'cover',
+          position: 'center',
+        })
 
         // Apply filter
         if (filter && filter !== 'none') {
