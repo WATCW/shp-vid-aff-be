@@ -160,21 +160,35 @@ export class ImageFallbackService {
   }
 
   /**
-   * Save generated image - use direct URL instead of downloading
+   * Save generated image - download and save locally because DALL-E URLs expire
    */
   private async saveGeneratedImage(
     product: IProduct,
     generatedImage: any
   ): Promise<string | null> {
     try {
-      // Use direct URL from DALL-E (no download needed)
-      // Note: DALL-E URLs expire after ~1 hour, so this might need revision
-      // For now, use it directly to avoid storage issues
-      logger.info(`[IMAGE-FALLBACK] ✅ Using DALL-E URL: ${generatedImage.url.substring(0, 60)}...`)
-      return generatedImage.url
+      // DALL-E URLs expire after 1-2 hours, so we MUST download and save them
+      logger.info(`[IMAGE-FALLBACK] 📥 Downloading DALL-E image: ${generatedImage.url.substring(0, 60)}...`)
+
+      // Download image
+      const imageBuffer = await imageSearchService.downloadImage(generatedImage.url)
+
+      // Generate filename
+      const hash = crypto.createHash('md5').update(product._id.toString()).digest('hex').substring(0, 8)
+      const timestamp = Date.now()
+      const filename = `dalle-${hash}-${timestamp}.png`
+      const filepath = path.join(this.fallbackImagesPath, filename)
+
+      // Save to disk
+      await fs.writeFile(filepath, imageBuffer)
+
+      // Return relative URL for serving via static plugin
+      const relativeUrl = `/storage/uploads/fallback-images/${filename}`
+      logger.info(`[IMAGE-FALLBACK] ✅ Saved DALL-E image: ${relativeUrl}`)
+      return relativeUrl
 
     } catch (error) {
-      logger.error('[IMAGE-FALLBACK] ❌ Error processing generated image:', error)
+      logger.error('[IMAGE-FALLBACK] ❌ Error downloading/saving generated image:', error)
       return null
     }
   }
