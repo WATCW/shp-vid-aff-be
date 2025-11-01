@@ -45,9 +45,10 @@ export class VideoGeneratorService {
 
     try {
       // Fetch product and validate
-      const product = await Product.findById(config.productId)
+      // config.productId is Shopee productId (string), not MongoDB _id
+      const product = await Product.findOne({ productId: config.productId })
       if (!product) {
-        throw new Error('Product not found')
+        throw new Error(`Product not found: ${config.productId}`)
       }
 
       if (!product.aiContent) {
