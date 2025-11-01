@@ -1,6 +1,7 @@
 import mongoose, { Document, Schema, Types } from 'mongoose'
 
 export interface IJob extends Document {
+  jobId?: string // Custom job ID (e.g., "ai-24833107295-1761973547733")
   type: 'ai_content' | 'scrape_product' | 'generate_video'
   productId: Types.ObjectId
   videoId?: Types.ObjectId
@@ -22,6 +23,13 @@ export interface IJob extends Document {
 }
 
 const JobSchema = new Schema<IJob>({
+  jobId: {
+    type: String,
+    unique: true,
+    sparse: true, // Allow null for old jobs without jobId
+    index: true,
+  },
+
   type: {
     type: String,
     enum: ['ai_content', 'scrape_product', 'generate_video'],

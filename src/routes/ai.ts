@@ -143,17 +143,7 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
               continue
             }
 
-            // Create job record in DB
-            logger.info(`💾 [AI] Creating job record in database...`)
-            const jobRecord = await Job.create({
-              type: 'ai_content',
-              productId: product._id,
-              status: 'waiting',
-              data: { options },
-            })
-            logger.info(`✅ [AI] Job record created: ${jobRecord._id}`)
-
-            // Queue job
+            // Queue job first to get the jobId
             logger.info(`📤 [AI] Adding job to RabbitMQ queue...`)
             const jobId = await addAIContentJob(
               {
@@ -168,6 +158,17 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
             }
 
             logger.info(`✅ [AI] Job queued successfully: ${jobId}`)
+
+            // Create job record in DB with the jobId
+            logger.info(`💾 [AI] Creating job record in database...`)
+            const jobRecord = await Job.create({
+              jobId, // Store the custom job ID
+              type: 'ai_content',
+              productId: product._id,
+              status: 'waiting',
+              data: { options },
+            })
+            logger.info(`✅ [AI] Job record created: ${jobRecord._id}`)
 
             jobs.push({
               productId: product.productId,
@@ -247,7 +248,8 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
       try {
         logger.info(`[AI] Getting status for job: ${params.jobId}`)
 
-        const dbJob = await Job.findById(params.jobId)
+        // Query by jobId field (not MongoDB _id)
+        const dbJob = await Job.findOne({ jobId: params.jobId })
 
         if (!dbJob) {
           logger.warn(`[AI] Job not found: ${params.jobId}`)
@@ -262,7 +264,7 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
         return {
           success: true,
           job: {
-            id: dbJob._id.toString(),
+            id: dbJob.jobId || dbJob._id.toString(),
             state: dbJob.status,
             progress: dbJob.status === 'completed' ? 100 : dbJob.status === 'active' ? 50 : 0,
             data: dbJob.data,
