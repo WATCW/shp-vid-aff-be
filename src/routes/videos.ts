@@ -141,7 +141,7 @@ export const videoRoutes = new Elysia({ prefix: '/videos' })
   )
 
   /**
-   * Generate a new video
+   * Generate a new video (SYNC - without queue)
    */
   .post(
     '/generate',
@@ -149,14 +149,14 @@ export const videoRoutes = new Elysia({ prefix: '/videos' })
       try {
         const { productId, templateId, musicId, customText } = body
 
-        logger.info('[VIDEO-GEN] 🎬 Starting video generation request:', {
+        logger.info('[VIDEO-GEN] 🎬 Starting synchronous video generation:', {
           productId,
           templateId,
           musicId,
           customTextLength: customText?.length,
         })
 
-        // Get product to validate and retrieve Shopify productId
+        // Get product
         const { Product } = await import('@models/product.model')
         const product = await Product.findById(productId)
 
@@ -164,40 +164,34 @@ export const videoRoutes = new Elysia({ prefix: '/videos' })
           throw new Error(`Product not found: ${productId}`)
         }
 
-        logger.info('[VIDEO-GEN] ✅ Product found:', {
-          mongoId: product._id,
-          shopifyId: product.productId,
-          name: product.name,
-        })
+        logger.info('[VIDEO-GEN] ✅ Product found:', product.name)
 
-        // Validate product has AI content
+        // Auto-generate AI content if not exists
         if (!product.aiContent) {
-          logger.error('[VIDEO-GEN] ❌ Product does not have AI content:', {
-            productId: product.productId,
-            name: product.name,
-          })
-          throw new Error('Product must have AI content generated before video can be created')
+          logger.info('[VIDEO-GEN] 📝 Auto-generating AI content...')
+          const { default: aiContentService } = await import('@services/ai-content.service')
+
+          const aiContent = await aiContentService.generateContent(product)
+          product.aiContent = aiContent
+          product.status = 'ready'
+          await product.save()
+
+          logger.info('[VIDEO-GEN] ✅ AI content generated')
         }
 
-        logger.info('[VIDEO-GEN] ✅ Product has AI content')
-
-        // Try to ensure product has images (fallback if needed)
-        logger.info('[VIDEO-GEN] 🔍 Checking/fetching product images...')
+        // Auto-fetch images if not exists
+        logger.info('[VIDEO-GEN] 🖼️  Checking/fetching product images...')
         const productImages = await imageFallbackService.ensureProductHasImages(product._id.toString())
 
         if (!productImages || productImages.length === 0) {
-          // All fallback strategies failed - manual upload required
-          logger.error('[VIDEO-GEN] ❌ No images available and fallback strategies failed:', {
-            productId: product.productId,
-            name: product.name,
-          })
           throw new Error('Product has no images and automatic image fetching failed. Please upload images manually.')
         }
 
         logger.info('[VIDEO-GEN] ✅ Product has images:', productImages.length)
 
-        // Add to queue first to get jobId (same pattern as AI content)
-        const jobId = await addVideoJob({
+        // Generate video synchronously
+        logger.info('[VIDEO-GEN] 🎥 Generating video...')
+        const video = await videoGeneratorService.generateVideo({
           productId: product.productId,
           templateId,
           customConfig: {
@@ -206,38 +200,23 @@ export const videoRoutes = new Elysia({ prefix: '/videos' })
           },
         })
 
-        if (!jobId) {
-          throw new Error('Failed to queue video generation job: RabbitMQ is not available')
-        }
-
-        logger.info(`[VIDEO-GEN] ✅ Video generation job queued: ${jobId}`)
-
-        // Create job record in DB with the custom jobId
-        const job = new Job({
-          jobId, // Store custom job ID
-          productId: product._id,
-          type: 'generate_video',
-          status: 'waiting',
-          progress: 0,
-        })
-
-        await job.save()
-        logger.info('[VIDEO-GEN] 💾 Job record saved:', job._id)
+        logger.info('[VIDEO-GEN] ✅ Video generated successfully:', video._id)
 
         return {
           success: true,
-          message: 'Video generation job queued',
+          message: 'Video generated successfully',
           data: {
-            jobId,
-            dbJobId: job._id.toString(),
-            status: 'queued',
+            videoId: video._id,
+            videoUrl: video.videoUrl,
+            thumbnailUrl: video.thumbnailUrl,
+            status: video.status,
           },
         }
       } catch (error: any) {
-        logger.error('Error queuing video generation:', error)
+        logger.error('[VIDEO-GEN] ❌ Error:', error)
         return {
           success: false,
-          error: error.message || 'Failed to queue video generation',
+          error: error.message || 'Failed to generate video',
         }
       }
     },
