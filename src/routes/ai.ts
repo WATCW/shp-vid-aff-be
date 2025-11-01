@@ -247,146 +247,30 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
       try {
         logger.info(`[AI] Getting status for job: ${params.jobId}`)
 
-        // Check if queues are available
-        if (!queuesInitialized) {
-          logger.warn('⚠️  [AI] Queue system not available - using database mode')
+        const dbJob = await Job.findById(params.jobId)
 
-          // Try to get status from database instead
-          try {
-            const dbJob = await Job.findById(params.jobId)
-
-            if (!dbJob) {
-              logger.warn(`[AI] Job not found in database: ${params.jobId}`)
-              return {
-                success: false,
-                error: 'Job not found',
-              }
-            }
-
-            logger.info(`[AI] Found job in database: ${dbJob.status}`)
-
-            return {
-              success: true,
-              job: {
-                id: dbJob._id.toString(),
-                state: dbJob.status,
-                progress: dbJob.status === 'completed' ? 100 : dbJob.status === 'active' ? 50 : 0,
-                data: dbJob.data,
-                result: dbJob.result,
-                failedReason: dbJob.error,
-              },
-              mode: 'database',
-            }
-          } catch (dbError) {
-            logger.error(`[AI] Database error finding job ${params.jobId}:`, dbError)
-            return {
-              success: false,
-              error: 'Invalid job ID or database error',
-            }
-          }
-        }
-
-        // Queue mode - get from BullMQ
-        logger.info('[AI] Using queue mode to get job status')
-
-        try {
-          const { aiContentQueue } = await import('@jobs/queue')
-          const bullJob = await aiContentQueue.getJob(params.jobId)
-
-          if (!bullJob) {
-            logger.warn(`[AI] Job not found in queue: ${params.jobId}, trying database...`)
-
-            // Fallback to database if not found in queue
-            try {
-              const dbJob = await Job.findById(params.jobId)
-
-              if (!dbJob) {
-                logger.warn(`[AI] Job not found in database either: ${params.jobId}`)
-                return {
-                  success: false,
-                  error: 'Job not found',
-                }
-              }
-
-              logger.info(`[AI] Found job in database (fallback): ${dbJob.status}`)
-
-              return {
-                success: true,
-                job: {
-                  id: dbJob._id.toString(),
-                  state: dbJob.status,
-                  progress: dbJob.status === 'completed' ? 100 : dbJob.status === 'active' ? 50 : 0,
-                  data: dbJob.data,
-                  result: dbJob.result,
-                  failedReason: dbJob.error,
-                },
-                mode: 'database-fallback',
-              }
-            } catch (dbError) {
-              logger.error(`[AI] Database fallback error:`, dbError)
-              return {
-                success: false,
-                error: 'Job not found in queue or database',
-              }
-            }
-          }
-
-          const state = await bullJob.getState()
-          const progress = bullJob.progress
-
-          logger.info(`[AI] Found job in queue: ${state}`)
-
+        if (!dbJob) {
+          logger.warn(`[AI] Job not found: ${params.jobId}`)
           return {
-            success: true,
-            job: {
-              id: bullJob.id,
-              state,
-              progress,
-              data: bullJob.data,
-              result: bullJob.returnvalue,
-              failedReason: bullJob.failedReason,
-            },
-            mode: 'queue',
-          }
-        } catch (queueError) {
-          logger.error(`[AI] Queue error finding job ${params.jobId}:`, queueError)
-
-          // Fallback to database on queue error
-          logger.info('[AI] Attempting database fallback after queue error...')
-
-          try {
-            const dbJob = await Job.findById(params.jobId)
-
-            if (!dbJob) {
-              return {
-                success: false,
-                error: 'Job not found in queue or database',
-              }
-            }
-
-            logger.info(`[AI] Found job in database (error fallback): ${dbJob.status}`)
-
-            return {
-              success: true,
-              job: {
-                id: dbJob._id.toString(),
-                state: dbJob.status,
-                progress: dbJob.status === 'completed' ? 100 : dbJob.status === 'active' ? 50 : 0,
-                data: dbJob.data,
-                result: dbJob.result,
-                failedReason: dbJob.error,
-              },
-              mode: 'database-fallback',
-            }
-          } catch (dbError) {
-            logger.error(`[AI] Database fallback also failed:`, dbError)
-            return {
-              success: false,
-              error: 'Failed to get job from queue or database',
-            }
+            success: false,
+            error: 'Job not found',
           }
         }
 
+        logger.info(`[AI] Found job in database: ${dbJob.status}`)
+
+        return {
+          success: true,
+          job: {
+            id: dbJob._id.toString(),
+            state: dbJob.status,
+            progress: dbJob.status === 'completed' ? 100 : dbJob.status === 'active' ? 50 : 0,
+            data: dbJob.data,
+            result: dbJob.result,
+            failedReason: dbJob.error,
+          },
+          mode: 'database',
+        }
       } catch (error) {
         logger.error('Failed to get job status:', error)
         return {
