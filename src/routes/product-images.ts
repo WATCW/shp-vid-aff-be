@@ -23,6 +23,16 @@ export const productImagesRoutes = new Elysia({ prefix: '/products/:id/images' }
       try {
         const { id: productId } = params
 
+        logger.warn(`[PRODUCT-IMAGES] ⚠️  Manual upload not recommended: Files will be lost on container restart`)
+        logger.warn(`[PRODUCT-IMAGES] ⚠️  Please use Pexels/DALL-E auto-fetch instead`)
+
+        return {
+          success: false,
+          error: 'Manual upload is currently disabled. Files stored locally will be lost on deployment. Please use automatic image fetching (Pexels/DALL-E) instead, or contact admin to setup cloud storage (S3/Cloudinary).',
+        }
+
+        // Disabled code below - needs cloud storage integration
+        /*
         logger.info(`[PRODUCT-IMAGES] 📤 Upload request for product: ${productId}`)
 
         // Find product
@@ -33,6 +43,7 @@ export const productImagesRoutes = new Elysia({ prefix: '/products/:id/images' }
             error: 'Product not found',
           }
         }
+        */
 
         // Get uploaded files
         const files = Array.isArray(body.images) ? body.images : [body.images]
