@@ -5,6 +5,9 @@ import { addVideoJob } from '@jobs/queue'
 import Video from '@models/video.model'
 import { Job } from '@models/job.model'
 import logger from '@utils/logger'
+import { existsSync } from 'fs'
+import { readFile } from 'fs/promises'
+import { join } from 'path'
 
 export const videoRoutes = new Elysia({ prefix: '/videos' })
   /**
@@ -342,5 +345,127 @@ export const videoRoutes = new Elysia({ prefix: '/videos' })
           error: error.message || 'Failed to fetch video stats',
         }
       }
+    }
+  )
+
+  /**
+   * Download video file
+   */
+  .get(
+    '/download/:id',
+    async ({ params, set }) => {
+      try {
+        const video = await Video.findById(params.id)
+
+        if (!video) {
+          set.status = 404
+          return {
+            success: false,
+            error: 'Video not found',
+          }
+        }
+
+        if (video.status !== 'completed' || !video.output?.filePath) {
+          set.status = 400
+          return {
+            success: false,
+            error: 'Video is not ready for download',
+          }
+        }
+
+        // Convert relative path to absolute
+        const filePath = video.output.filePath.startsWith('/')
+          ? join(process.cwd(), video.output.filePath.substring(1))
+          : join(process.cwd(), video.output.filePath)
+
+        if (!existsSync(filePath)) {
+          set.status = 404
+          return {
+            success: false,
+            error: 'Video file not found on server',
+          }
+        }
+
+        const fileBuffer = await readFile(filePath)
+
+        set.headers['Content-Type'] = 'video/mp4'
+        set.headers['Content-Disposition'] = `attachment; filename="${video.output.fileName || 'video.mp4'}"`
+        set.headers['Content-Length'] = fileBuffer.length.toString()
+
+        return fileBuffer
+      } catch (error: any) {
+        logger.error('Error downloading video:', error)
+        set.status = 500
+        return {
+          success: false,
+          error: error.message || 'Failed to download video',
+        }
+      }
+    },
+    {
+      params: t.Object({
+        id: t.String(),
+      }),
+    }
+  )
+
+  /**
+   * Stream video file (for preview)
+   */
+  .get(
+    '/stream/:id',
+    async ({ params, set }) => {
+      try {
+        const video = await Video.findById(params.id)
+
+        if (!video) {
+          set.status = 404
+          return {
+            success: false,
+            error: 'Video not found',
+          }
+        }
+
+        if (video.status !== 'completed' || !video.output?.filePath) {
+          set.status = 400
+          return {
+            success: false,
+            error: 'Video is not ready for streaming',
+          }
+        }
+
+        // Convert relative path to absolute
+        const filePath = video.output.filePath.startsWith('/')
+          ? join(process.cwd(), video.output.filePath.substring(1))
+          : join(process.cwd(), video.output.filePath)
+
+        if (!existsSync(filePath)) {
+          set.status = 404
+          return {
+            success: false,
+            error: 'Video file not found on server',
+          }
+        }
+
+        const fileBuffer = await readFile(filePath)
+
+        set.headers['Content-Type'] = 'video/mp4'
+        set.headers['Content-Length'] = fileBuffer.length.toString()
+        set.headers['Accept-Ranges'] = 'bytes'
+
+        return fileBuffer
+      } catch (error: any) {
+        logger.error('Error streaming video:', error)
+        set.status = 500
+        return {
+          success: false,
+          error: error.message || 'Failed to stream video',
+        }
+      }
+    },
+    {
+      params: t.Object({
+        id: t.String(),
+      }),
     }
   )
