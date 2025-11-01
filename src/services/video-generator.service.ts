@@ -25,9 +25,9 @@ export interface VideoScene {
 }
 
 export class VideoGeneratorService {
-  private tempPath = './storage/temp'
-  private videosPath = './storage/videos'
-  private thumbnailsPath = './storage/thumbnails'
+  private tempPath = join(process.cwd(), 'storage', 'temp')
+  private videosPath = join(process.cwd(), 'storage', 'videos')
+  private thumbnailsPath = join(process.cwd(), 'storage', 'thumbnails')
 
   constructor() {
     // Ensure directories exist
