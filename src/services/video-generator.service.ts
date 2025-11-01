@@ -233,6 +233,24 @@ export class VideoGeneratorService {
   }
 
   /**
+   * Convert image URL to local file path
+   */
+  private resolveImagePath(imagePath: string): string {
+    // If it's a URL, return as-is (sharp can handle URLs)
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      return imagePath
+    }
+
+    // If it starts with /uploads or /storage, prepend ./storage
+    if (imagePath.startsWith('/uploads') || imagePath.startsWith('/storage')) {
+      return join(process.cwd(), 'storage', imagePath.replace(/^\//, ''))
+    }
+
+    // Otherwise assume it's already a full path
+    return imagePath
+  }
+
+  /**
    * Process scenes with image effects and text overlays
    */
   private async processScenes(
@@ -253,13 +271,17 @@ export class VideoGeneratorService {
       const scene = scenes[i]
       const outputPath = join(this.tempPath, `scene-${i}-${nanoid()}.png`)
 
+      // Resolve image path (convert URL paths to local file paths)
+      const resolvedImagePath = this.resolveImagePath(scene.image)
+
       logger.info(`[VIDEO-GEN] Processing scene ${i + 1}/${scenes.length}:`, {
         imageSource: scene.image?.substring(0, 100) || 'no-image',
+        resolvedPath: resolvedImagePath?.substring(0, 100) || 'no-path',
         text: scene.text?.substring(0, 50) || 'no-text',
       })
 
       try {
-        let imageProcessor = sharp(scene.image)
+        let imageProcessor = sharp(resolvedImagePath)
           .resize(resolution.width, resolution.height, {
             fit: 'cover',
             position: 'center',
