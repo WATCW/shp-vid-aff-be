@@ -133,7 +133,7 @@ export class ImageFallbackService {
   }
 
   /**
-   * Save searched images to storage
+   * Save searched images - use direct URLs instead of downloading
    */
   private async saveSearchedImages(
     product: IProduct,
@@ -144,24 +144,15 @@ export class ImageFallbackService {
     for (let i = 0; i < searchResults.length; i++) {
       try {
         const result = searchResults[i]
-        const imageBuffer = await imageSearchService.downloadImage(result.url)
 
-        // Generate filename
-        const hash = crypto.createHash('md5').update(`${product.productId}-search-${i}`).digest('hex')
-        const filename = `${hash}.jpg`
-        const filepath = path.join(this.fallbackImagesPath, filename)
+        // Use direct URL from Pexels (no download needed)
+        // This avoids storage issues in ephemeral containers
+        savedUrls.push(result.url)
 
-        // Save to disk
-        await fs.writeFile(filepath, imageBuffer)
-
-        // Return relative URL for database
-        const relativeUrl = `/uploads/fallback-images/${filename}`
-        savedUrls.push(relativeUrl)
-
-        logger.info(`[IMAGE-FALLBACK] 💾 Saved searched image ${i + 1}: ${relativeUrl}`)
+        logger.info(`[IMAGE-FALLBACK] ✅ Using Pexels URL ${i + 1}: ${result.url.substring(0, 60)}...`)
 
       } catch (error) {
-        logger.error(`[IMAGE-FALLBACK] ❌ Error saving searched image ${i}:`, error)
+        logger.error(`[IMAGE-FALLBACK] ❌ Error processing searched image ${i}:`, error)
       }
     }
 
@@ -169,31 +160,21 @@ export class ImageFallbackService {
   }
 
   /**
-   * Save generated image to storage
+   * Save generated image - use direct URL instead of downloading
    */
   private async saveGeneratedImage(
     product: IProduct,
     generatedImage: any
   ): Promise<string | null> {
     try {
-      const imageBuffer = await imageGenerationService.downloadImage(generatedImage.url)
-
-      // Generate filename
-      const hash = crypto.createHash('md5').update(`${product.productId}-generated`).digest('hex')
-      const filename = `${hash}.png`
-      const filepath = path.join(this.fallbackImagesPath, filename)
-
-      // Save to disk
-      await fs.writeFile(filepath, imageBuffer)
-
-      // Return relative URL for database
-      const relativeUrl = `/uploads/fallback-images/${filename}`
-
-      logger.info(`[IMAGE-FALLBACK] 💾 Saved generated image: ${relativeUrl}`)
-      return relativeUrl
+      // Use direct URL from DALL-E (no download needed)
+      // Note: DALL-E URLs expire after ~1 hour, so this might need revision
+      // For now, use it directly to avoid storage issues
+      logger.info(`[IMAGE-FALLBACK] ✅ Using DALL-E URL: ${generatedImage.url.substring(0, 60)}...`)
+      return generatedImage.url
 
     } catch (error) {
-      logger.error('[IMAGE-FALLBACK] ❌ Error saving generated image:', error)
+      logger.error('[IMAGE-FALLBACK] ❌ Error processing generated image:', error)
       return null
     }
   }
