@@ -186,7 +186,12 @@ Press CTRL+C to stop
     })
 
   } catch (error) {
-    logger.error('Failed to start server:', error)
+    logger.error('Failed to start server:')
+    console.error(error)
+    if (error instanceof Error) {
+      logger.error(`Message: ${error.message}`)
+      logger.error(`Stack: ${error.stack}`)
+    }
     process.exit(1)
   }
 }

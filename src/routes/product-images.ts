@@ -13,7 +13,7 @@ fs.mkdir(FALLBACK_IMAGES_PATH, { recursive: true }).catch(err => {
   logger.error('[PRODUCT-IMAGES] Error creating directories:', err)
 })
 
-export const productImagesRoutes = new Elysia({ prefix: '/products/:productId/images' })
+export const productImagesRoutes = new Elysia({ prefix: '/products/:id/images' })
   /**
    * Upload images for a product (manual upload)
    */
@@ -21,7 +21,7 @@ export const productImagesRoutes = new Elysia({ prefix: '/products/:productId/im
     '/upload',
     async ({ params, body }: any) => {
       try {
-        const { productId } = params
+        const { id: productId } = params
 
         logger.info(`[PRODUCT-IMAGES] 📤 Upload request for product: ${productId}`)
 
@@ -128,7 +128,7 @@ export const productImagesRoutes = new Elysia({ prefix: '/products/:productId/im
     '/',
     async ({ params }) => {
       try {
-        const { productId } = params
+        const { id: productId } = params
 
         const product = await Product.findById(productId)
         if (!product) {
@@ -160,7 +160,7 @@ export const productImagesRoutes = new Elysia({ prefix: '/products/:productId/im
     '/',
     async ({ params }) => {
       try {
-        const { productId } = params
+        const { id: productId } = params
 
         const product = await Product.findById(productId)
         if (!product) {
