@@ -128,11 +128,16 @@ export class VideoGeneratorService {
 
       // Update video record
       const { size } = await import('fs/promises').then((fs) => fs.stat(videoPath))
+
+      // Convert absolute paths to relative URLs for serving via static plugin
+      const relativeVideoPath = videoPath.replace(process.cwd(), '').replace(/\\/g, '/')
+      const relativeThumbnailPath = thumbnailPath.replace(process.cwd(), '').replace(/\\/g, '/')
+
       video.output = {
-        filePath: videoPath,
+        filePath: relativeVideoPath,
         fileName: `${videoId}.mp4`,
         fileSize: size,
-        thumbnailPath,
+        thumbnailPath: relativeThumbnailPath,
       }
       video.status = 'completed'
       video.progress = 100
