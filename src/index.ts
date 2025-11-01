@@ -18,6 +18,7 @@ import { aiRoutes } from './routes/ai'
 import { videoRoutes } from './routes/videos'
 import { templateRoutes } from './routes/templates'
 import { musicRoutes } from './routes/music'
+import { adminRoutes } from './routes/admin'
 
 // Ensure storage directories exist
 const ensureDirectories = () => {
@@ -148,6 +149,7 @@ const startServer = async () => {
           .use(videoRoutes)
           .use(templateRoutes)
           .use(musicRoutes)
+          .use(adminRoutes)
       )
 
       // Serve uploaded files and videos
