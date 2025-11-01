@@ -180,6 +180,18 @@ export const videoRoutes = new Elysia({ prefix: '/videos' })
 
         logger.info('[VIDEO-GEN] ✅ Product has AI content')
 
+        // Validate product has images
+        if (!product.images || product.images.length === 0) {
+          logger.error('[VIDEO-GEN] ❌ Product has no images:', {
+            productId: product.productId,
+            name: product.name,
+            images: product.images,
+          })
+          throw new Error('Product must have at least one image to generate video')
+        }
+
+        logger.info('[VIDEO-GEN] ✅ Product has images:', product.images.length)
+
         // Add to queue first to get jobId (same pattern as AI content)
         const jobId = await addVideoJob({
           productId: product.productId,
