@@ -55,19 +55,25 @@ const startServer = async () => {
     await initializeData()
     logger.info('Default data initialization complete')
 
-    // Initialize RabbitMQ and queues
-    logger.info('Initializing RabbitMQ connection...')
-    const rabbitMQReady = await ensureRabbitMQ()
-
-    if (rabbitMQReady) {
-      await initializeQueues()
-      logger.info('✅ RabbitMQ queues initialized successfully')
-    } else {
-      logger.warn('⚠️  RabbitMQ is not available - Queue features (video generation) will be disabled')
-      logger.info('💡 To enable queue features, please check:')
-      logger.info('   1. RabbitMQ endpoint is accessible')
-      logger.info('   2. RABBITMQ_URL environment variable is set correctly')
-    }
+    // Initialize RabbitMQ in background (non-blocking)
+    // This prevents health check timeout while waiting for RabbitMQ
+    logger.info('Initializing RabbitMQ connection in background...')
+    ensureRabbitMQ().then((rabbitMQReady) => {
+      if (rabbitMQReady) {
+        initializeQueues().then(() => {
+          logger.info('✅ RabbitMQ queues initialized successfully')
+        }).catch((err) => {
+          logger.error('❌ Failed to initialize RabbitMQ queues:', err)
+        })
+      } else {
+        logger.warn('⚠️  RabbitMQ is not available - Queue features (video generation) will be disabled')
+        logger.info('💡 To enable queue features, please check:')
+        logger.info('   1. RabbitMQ endpoint is accessible')
+        logger.info('   2. RABBITMQ_URL environment variable is set correctly')
+      }
+    }).catch((err) => {
+      logger.error('❌ RabbitMQ initialization error:', err)
+    })
 
     // Create Elysia app
     const app = new Elysia()
