@@ -1,6 +1,6 @@
 import ffmpeg from 'fluent-ffmpeg'
 import sharp from 'sharp'
-import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, unlinkSync, writeFileSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { nanoid } from 'nanoid'
 import axios from 'axios'
@@ -9,6 +9,7 @@ import Video, { IVideo } from '@models/video.model'
 import Template, { ITemplate } from '@models/template.model'
 import Music from '@models/music.model'
 import Product from '@models/product.model'
+import googleDriveService from './google-drive.service'
 
 export interface VideoGenerationConfig {
   productId: string
@@ -126,18 +127,59 @@ export class VideoGeneratorService {
       const thumbnailPath = await this.generateThumbnail(videoPath, videoId)
       if (progressCallback) progressCallback(95)
 
-      // Update video record
+      // Get file size
       const { size } = await import('fs/promises').then((fs) => fs.stat(videoPath))
 
-      // Convert absolute paths to relative URLs for serving via static plugin
-      const relativeVideoPath = videoPath.replace(process.cwd(), '').replace(/\\/g, '/')
-      const relativeThumbnailPath = thumbnailPath.replace(process.cwd(), '').replace(/\\/g, '/')
+      // Upload to Google Drive if enabled, otherwise use local storage
+      let finalVideoPath: string
+      let finalThumbnailPath: string
+      let googleDriveVideoId: string | undefined
+      let googleDriveThumbnailId: string | undefined
 
+      if (googleDriveService.isEnabled()) {
+        logger.info('[VIDEO-GEN] ☁️  Uploading video to Google Drive...')
+
+        // Upload video
+        const videoBuffer = readFileSync(videoPath)
+        const videoResult = await googleDriveService.uploadFile(
+          videoBuffer,
+          `${videoId}.mp4`,
+          'video/mp4'
+        )
+        finalVideoPath = videoResult.directUrl
+        googleDriveVideoId = videoResult.fileId
+
+        // Upload thumbnail
+        const thumbnailBuffer = readFileSync(thumbnailPath)
+        const thumbnailResult = await googleDriveService.uploadFile(
+          thumbnailBuffer,
+          `${videoId}.jpg`,
+          'image/jpeg'
+        )
+        finalThumbnailPath = thumbnailResult.directUrl
+        googleDriveThumbnailId = thumbnailResult.fileId
+
+        logger.info('[VIDEO-GEN] ✅ Uploaded to Google Drive')
+
+        // Clean up local files
+        unlinkSync(videoPath)
+        unlinkSync(thumbnailPath)
+      } else {
+        logger.info('[VIDEO-GEN] 💾 Using local storage')
+
+        // Convert absolute paths to relative URLs for serving via static plugin
+        finalVideoPath = videoPath.replace(process.cwd(), '').replace(/\\/g, '/')
+        finalThumbnailPath = thumbnailPath.replace(process.cwd(), '').replace(/\\/g, '/')
+      }
+
+      // Update video record
       video.output = {
-        filePath: relativeVideoPath,
+        filePath: finalVideoPath,
         fileName: `${videoId}.mp4`,
         fileSize: size,
-        thumbnailPath: relativeThumbnailPath,
+        thumbnailPath: finalThumbnailPath,
+        googleDriveFileId: googleDriveVideoId,
+        googleDriveThumbnailId: googleDriveThumbnailId,
       }
       video.status = 'completed'
       video.progress = 100

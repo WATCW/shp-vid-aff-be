@@ -1,6 +1,7 @@
 import { Product, IProduct } from '@models/product.model'
 import imageSearchService from './image-search.service'
 import imageGenerationService from './image-generation.service'
+import googleDriveService from './google-drive.service'
 import logger from '@utils/logger'
 import path from 'path'
 import fs from 'fs/promises'
@@ -160,7 +161,7 @@ export class ImageFallbackService {
   }
 
   /**
-   * Save generated image - download and save locally because DALL-E URLs expire
+   * Save generated image - download and save (Google Drive or local storage)
    */
   private async saveGeneratedImage(
     product: IProduct,
@@ -177,15 +178,30 @@ export class ImageFallbackService {
       const hash = crypto.createHash('md5').update(product._id.toString()).digest('hex').substring(0, 8)
       const timestamp = Date.now()
       const filename = `dalle-${hash}-${timestamp}.png`
-      const filepath = path.join(this.fallbackImagesPath, filename)
 
-      // Save to disk
-      await fs.writeFile(filepath, imageBuffer)
+      // Check if Google Drive is enabled
+      if (googleDriveService.isEnabled()) {
+        logger.info(`[IMAGE-FALLBACK] ☁️  Uploading to Google Drive...`)
 
-      // Return relative URL for serving via static plugin
-      const relativeUrl = `/storage/uploads/fallback-images/${filename}`
-      logger.info(`[IMAGE-FALLBACK] ✅ Saved DALL-E image: ${relativeUrl}`)
-      return relativeUrl
+        const result = await googleDriveService.uploadFile(
+          imageBuffer,
+          filename,
+          'image/png'
+        )
+
+        logger.info(`[IMAGE-FALLBACK] ✅ Uploaded to Google Drive: ${result.directUrl}`)
+        return result.directUrl
+      } else {
+        // Fallback to local storage
+        logger.info(`[IMAGE-FALLBACK] 💾 Saving to local storage...`)
+
+        const filepath = path.join(this.fallbackImagesPath, filename)
+        await fs.writeFile(filepath, imageBuffer)
+
+        const relativeUrl = `/storage/uploads/fallback-images/${filename}`
+        logger.info(`[IMAGE-FALLBACK] ✅ Saved locally: ${relativeUrl}`)
+        return relativeUrl
+      }
 
     } catch (error) {
       logger.error('[IMAGE-FALLBACK] ❌ Error downloading/saving generated image:', error)

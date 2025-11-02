@@ -70,8 +70,8 @@ const VideoOutputSchema = new Schema<IVideoOutput>({
   filePath: { type: String, required: true },
   fileName: { type: String, required: true },
   fileSize: { type: Number, required: true },
-  googleDriveId: { type: String },
-  googleDriveUrl: { type: String },
+  googleDriveFileId: { type: String },
+  googleDriveThumbnailId: { type: String },
   thumbnailPath: { type: String },
 }, { _id: false })
 
