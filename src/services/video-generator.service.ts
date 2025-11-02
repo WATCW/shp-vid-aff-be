@@ -459,14 +459,20 @@ export class VideoGeneratorService {
     return new Promise((resolve, reject) => {
       let command = ffmpeg()
         .input(inputListPath)
-        .inputOptions(['-f concat', '-safe 0'])
+        .inputOptions([
+          '-f concat',
+          '-safe 0',
+          '-threads 1', // Limit threads to reduce memory usage
+        ])
         .outputOptions([
           `-vf scale=${resolution.width}:${resolution.height}`,
           `-r ${fps}`,
           '-pix_fmt yuv420p',
           '-c:v libx264',
-          '-preset medium',
-          '-crf 23',
+          '-preset ultrafast', // Changed from 'medium' to 'ultrafast' for less memory
+          '-crf 28', // Increased from 23 to 28 for smaller file size and less memory
+          '-movflags +faststart',
+          '-max_muxing_queue_size 1024', // Prevent memory overflow
         ])
 
       // Add music if specified

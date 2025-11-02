@@ -20,8 +20,8 @@ const defaultTemplates = [
         accent: '#FF6B6B',
       },
       videoSettings: {
-        resolution: { width: 1080, height: 1920 },
-        fps: 30,
+        resolution: { width: 720, height: 1280 },
+        fps: 24,
         duration: 15,
         backgroundMusic: true,
       },
@@ -68,8 +68,8 @@ const defaultTemplates = [
         accent: '#FF69B4',
       },
       videoSettings: {
-        resolution: { width: 1080, height: 1920 },
-        fps: 30,
+        resolution: { width: 720, height: 1280 },
+        fps: 24,
         duration: 15,
         backgroundMusic: true,
       },
@@ -117,8 +117,8 @@ const defaultTemplates = [
         accent: '#FFD700',
       },
       videoSettings: {
-        resolution: { width: 1080, height: 1920 },
-        fps: 30,
+        resolution: { width: 720, height: 1280 },
+        fps: 24,
         duration: 18,
         backgroundMusic: true,
       },
