@@ -263,8 +263,13 @@ export class VideoGeneratorService {
    * Convert image URL to local file path
    */
   private resolveImagePath(imagePath: string): string {
-    // If it starts with /uploads or /storage, prepend ./storage
-    if (imagePath.startsWith('/uploads') || imagePath.startsWith('/storage')) {
+    // If it starts with /storage, prepend process.cwd() only
+    if (imagePath.startsWith('/storage')) {
+      return join(process.cwd(), imagePath.replace(/^\//, ''))
+    }
+
+    // If it starts with /uploads, prepend storage directory
+    if (imagePath.startsWith('/uploads')) {
       return join(process.cwd(), 'storage', imagePath.replace(/^\//, ''))
     }
 
