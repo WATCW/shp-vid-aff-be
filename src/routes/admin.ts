@@ -188,3 +188,72 @@ export const adminRoutes = new Elysia({ prefix: '/admin' })
       }
     }
   })
+
+  /**
+   * Cleanup ALL fallback images (for troubleshooting)
+   */
+  .get('/cleanup-all-fallback-images', async () => {
+    try {
+      logger.info('[ADMIN] 🧹 Cleaning up ALL fallback images...')
+
+      const productsWithFallbackImages = await Product.find({
+        fallbackImages: { $exists: true },
+      })
+
+      logger.info(`[ADMIN] Found ${productsWithFallbackImages.length} products with fallback images`)
+
+      if (productsWithFallbackImages.length === 0) {
+        return {
+          success: true,
+          message: 'No products with fallback images found',
+          stats: {
+            found: 0,
+            cleaned: 0,
+            failed: 0,
+          },
+        }
+      }
+
+      const results = {
+        cleaned: [] as string[],
+        failed: [] as string[],
+      }
+
+      for (const product of productsWithFallbackImages) {
+        try {
+          logger.info(`[ADMIN] Cleaning product: ${product.name} (${product.productId})`)
+
+          await Product.findByIdAndUpdate(product._id, {
+            $unset: { fallbackImages: 1 },
+          })
+
+          results.cleaned.push(product.productId)
+          logger.info(`[ADMIN] ✅ Cleaned product ${product.productId}`)
+        } catch (error) {
+          logger.error(`[ADMIN] ❌ Error cleaning product ${product.productId}:`, error)
+          results.failed.push(product.productId)
+        }
+      }
+
+      return {
+        success: true,
+        message: 'Fallback images cleanup completed',
+        stats: {
+          found: productsWithFallbackImages.length,
+          cleaned: results.cleaned.length,
+          failed: results.failed.length,
+        },
+        details: {
+          cleanedProducts: results.cleaned,
+          failedProducts: results.failed,
+        },
+        note: 'All fallback images removed. They will be regenerated next time you generate a video.',
+      }
+    } catch (error: any) {
+      logger.error('[ADMIN] ❌ Error during cleanup:', error)
+      return {
+        success: false,
+        error: error.message || 'Failed to cleanup fallback images',
+      }
+    }
+  })
