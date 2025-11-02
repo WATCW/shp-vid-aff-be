@@ -35,7 +35,7 @@ const defaultTemplates = [
       },
       imageEffects: {
         transition: 'fade',
-        displayTime: 3,
+        displayTime: 5, // Increased from 3 to 5 seconds per image
         kenBurns: false,
         filter: 'none',
       },
@@ -84,7 +84,7 @@ const defaultTemplates = [
       },
       imageEffects: {
         transition: 'dissolve',
-        displayTime: 3,
+        displayTime: 5,
         kenBurns: true,
         filter: 'warm',
       },
@@ -133,7 +133,7 @@ const defaultTemplates = [
       },
       imageEffects: {
         transition: 'slide',
-        displayTime: 3,
+        displayTime: 5,
         kenBurns: true,
         filter: 'vivid',
       },

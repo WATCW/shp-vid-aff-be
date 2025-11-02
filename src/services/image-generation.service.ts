@@ -81,14 +81,19 @@ export class ImageGenerationService {
    * Create an optimized prompt for product image generation
    */
   private createProductImagePrompt(productName: string): string {
-    // Clean product name
-    const cleanName = productName
-      .replace(/[\[\]()]/g, '')
-      .replace(/\d+ml|\d+g|\d+kg/gi, '')
+    // Clean product name - remove brackets, sizes, and extra info
+    let cleanName = productName
+      .replace(/[\[\](){}]/g, ' ')
+      .replace(/\d+ml|\d+g|\d+kg|\d+oz|\d+L/gi, ' ')
+      .replace(/\s+/g, ' ')
       .trim()
 
-    // Create detailed prompt for better product images
-    return `A professional, high-quality product photography of ${cleanName}. Studio lighting, clean white background, centered composition, photorealistic, commercial product shot, 4k quality, sharp focus.`
+    // Extract key product type (first 3-5 meaningful words)
+    const words = cleanName.split(' ').filter(w => w.length > 2)
+    const productType = words.slice(0, Math.min(5, words.length)).join(' ')
+
+    // Create detailed, specific prompt for accurate product representation
+    return `Professional product photography: ${productType}. The EXACT product shown clearly in the center. Realistic lighting, plain white background, sharp focus, high detail, commercial photography style, no text, no labels, just the actual product itself.`
   }
 
   /**

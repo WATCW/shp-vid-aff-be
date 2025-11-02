@@ -253,29 +253,30 @@ export class VideoGeneratorService {
       throw new Error('Product has no images. Cannot generate video.')
     }
 
-    // Create scenes from images with text overlays
-    const maxScenes = Math.min(images.length, textSlides.length)
+    // Calculate minimum scenes needed for at least 10 seconds video
+    const minDuration = 10 // minimum 10 seconds
+    const minScenes = Math.ceil(minDuration / sceneDuration)
 
-    for (let i = 0; i < maxScenes; i++) {
+    // Determine target scene count (at least minScenes, prefer matching text slides)
+    const targetScenes = Math.max(minScenes, textSlides.length)
+
+    logger.info(`[VIDEO-GEN] Target scenes: ${targetScenes} (min ${minScenes} for ${minDuration}s video)`)
+
+    // Create scenes - repeat images if necessary to reach target duration
+    for (let i = 0; i < targetScenes; i++) {
+      const imageIndex = i % images.length // Cycle through available images
+      const textIndex = i < textSlides.length ? i : -1 // Use text if available
+
       scenes.push({
-        image: images[i],
-        text: textSlides[i],
+        image: images[imageIndex],
+        text: textIndex >= 0 ? textSlides[textIndex] : '',
         duration: sceneDuration,
         transition: template.config.imageEffects.transition,
       })
     }
 
-    // If we have more images than text, add remaining images without text
-    if (images.length > textSlides.length) {
-      for (let i = textSlides.length; i < images.length; i++) {
-        scenes.push({
-          image: images[i],
-          text: '',
-          duration: sceneDuration,
-          transition: template.config.imageEffects.transition,
-        })
-      }
-    }
+    const totalDuration = scenes.length * sceneDuration
+    logger.info(`[VIDEO-GEN] Created ${scenes.length} scenes, total duration: ${totalDuration}s`)
 
     return scenes
   }

@@ -69,20 +69,28 @@ export class ImageSearchService {
 
   /**
    * Clean product name for better search results
-   * Remove special characters, brand names in Thai, etc.
+   * Extract key product type and remove noise
    */
   private cleanProductName(productName: string): string {
-    // Remove common Thai words that don't help with image search
+    // Remove special characters, brackets, and measurements
     let cleaned = productName
-      .replace(/[\[\]()]/g, '') // Remove brackets
-      .replace(/\d+ml|\d+g|\d+kg/gi, '') // Remove weights
-      .replace(/ขนาด|แพค|ชุด|เซ็ต/gi, '') // Remove Thai size words
+      .replace(/[\[\](){}]/g, ' ')
+      .replace(/\d+ml|\d+g|\d+kg|\d+oz|\d+L|\d+มล|\d+กรัม/gi, ' ')
+      .replace(/ขนาด|แพค|ชุด|เซ็ต|ราคา|โปร|พิเศษ/gi, ' ')
+      .replace(/\s+/g, ' ')
       .trim()
 
-    // If too long, take first few words
-    const words = cleaned.split(' ')
-    if (words.length > 4) {
-      cleaned = words.slice(0, 4).join(' ')
+    // Extract meaningful words (remove very short words)
+    const words = cleaned.split(' ').filter(w => w.length > 2)
+
+    // Take first 3-4 meaningful words for focused search
+    const keyWords = words.slice(0, Math.min(4, words.length))
+    cleaned = keyWords.join(' ')
+
+    // If query is still too generic or empty, try to extract brand/product type
+    if (!cleaned || cleaned.length < 3) {
+      // Use first few words from original name
+      cleaned = productName.split(' ').slice(0, 3).join(' ')
     }
 
     logger.info(`[IMAGE-SEARCH] 🧹 Cleaned query: "${productName}" → "${cleaned}"`)
