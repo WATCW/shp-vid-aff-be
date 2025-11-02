@@ -14,7 +14,7 @@ import crypto from 'crypto'
  * 4. Return null (manual upload required)
  */
 export class ImageFallbackService {
-  private storageBasePath = process.env.UPLOAD_PATH || './storage/uploads'
+  private storageBasePath = process.env.UPLOAD_PATH || path.join(process.cwd(), 'storage', 'uploads')
   private fallbackImagesPath = path.join(this.storageBasePath, 'fallback-images')
 
   constructor() {
