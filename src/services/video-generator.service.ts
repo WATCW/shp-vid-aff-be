@@ -330,6 +330,11 @@ export class VideoGeneratorService {
    * Convert image URL to local file path
    */
   private resolveImagePath(imagePath: string): string {
+    // If it starts with /app/storage (production path), convert to local path
+    if (imagePath.startsWith('/app/storage')) {
+      return join(process.cwd(), 'storage', imagePath.replace('/app/storage/', ''))
+    }
+
     // If it starts with /storage, prepend process.cwd() only
     if (imagePath.startsWith('/storage')) {
       return join(process.cwd(), imagePath.replace(/^\//, ''))
