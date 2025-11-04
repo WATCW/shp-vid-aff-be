@@ -16,6 +16,8 @@ export interface VideoGenerationConfig {
   templateId?: string
   musicId?: string
   customText?: string[]
+  enableVoiceNarration?: boolean
+  narrationText?: string
 }
 
 export interface VideoScene {
@@ -110,12 +112,34 @@ export class VideoGeneratorService {
       const processedScenes = await this.processScenes(scenes, template)
       if (progressCallback) progressCallback(50)
 
+      // Generate TTS audio if enabled
+      let narrationAudioPath: string | undefined
+      if (config.enableVoiceNarration && config.narrationText) {
+        logger.info('[VIDEO-GEN] 🎤 Generating voice narration...')
+        const { default: ttsService } = await import('./tts.service')
+
+        if (ttsService.isAvailable()) {
+          narrationAudioPath = join(this.tempPath, `${videoId}_narration.mp3`)
+          try {
+            await ttsService.generateSpeech(config.narrationText, narrationAudioPath)
+            logger.info('[VIDEO-GEN] ✅ Voice narration generated')
+          } catch (error) {
+            logger.error('[VIDEO-GEN] ❌ Failed to generate voice narration:', error)
+            // Continue without narration if TTS fails
+            narrationAudioPath = undefined
+          }
+        } else {
+          logger.warn('[VIDEO-GEN] ⚠️  TTS service not available, skipping voice narration')
+        }
+      }
+
       // Generate video
       const videoPath = await this.createVideoFromScenes(
         processedScenes,
         template,
         videoId,
         config.musicId,
+        narrationAudioPath,
         (progress) => {
           if (progressCallback) progressCallback(50 + progress * 0.4)
         }
@@ -420,6 +444,7 @@ export class VideoGeneratorService {
     template: ITemplate,
     videoId: string,
     musicId?: string,
+    narrationAudioPath?: string,
     progressCallback?: (progress: number) => void
   ): Promise<string> {
     const outputPath = join(this.videosPath, `${videoId}.mp4`)
@@ -475,8 +500,35 @@ export class VideoGeneratorService {
           '-max_muxing_queue_size 1024', // Prevent memory overflow
         ])
 
-      // Add music if specified
-      if (musicId) {
+      // Handle audio inputs (music and/or narration)
+      const hasMusic = !!musicId
+      const hasNarration = !!narrationAudioPath && existsSync(narrationAudioPath)
+
+      if (hasMusic && hasNarration) {
+        // Both music and narration - mix them together
+        Music.findById(musicId).then((music) => {
+          if (music && existsSync(music.filePath)) {
+            command = command
+              .input(music.filePath) // Background music
+              .input(narrationAudioPath!) // Voice narration
+              .complexFilter([
+                // Lower music volume and mix with narration
+                '[1:a]volume=0.3[music]', // Music at 30% volume
+                '[2:a]volume=1.0[narration]', // Narration at 100% volume
+                '[music][narration]amix=inputs=2:duration=first[aout]', // Mix both
+              ])
+              .outputOptions([
+                '-map 0:v', // Video from first input
+                '-map [aout]', // Mixed audio
+                '-c:v libx264',
+                '-c:a aac',
+                '-b:a 128k',
+                '-shortest',
+              ])
+          }
+        })
+      } else if (hasMusic) {
+        // Only music
         Music.findById(musicId).then((music) => {
           if (music && existsSync(music.filePath)) {
             command = command
@@ -488,6 +540,15 @@ export class VideoGeneratorService {
               ])
           }
         })
+      } else if (hasNarration) {
+        // Only narration
+        command = command
+          .input(narrationAudioPath)
+          .outputOptions([
+            '-c:a aac',
+            '-b:a 128k',
+            '-shortest',
+          ])
       }
 
       command
@@ -514,6 +575,16 @@ export class VideoGeneratorService {
             if (existsSync(inputListPath)) unlinkSync(inputListPath)
           } catch (err) {
             logger.warn(`Failed to delete input list: ${inputListPath}`)
+          }
+
+          // Cleanup narration audio file
+          if (narrationAudioPath && existsSync(narrationAudioPath)) {
+            try {
+              unlinkSync(narrationAudioPath)
+              logger.info('[VIDEO-GEN] Cleaned up narration audio file')
+            } catch (err) {
+              logger.warn(`Failed to delete narration audio: ${narrationAudioPath}`)
+            }
           }
 
           resolve(outputPath)

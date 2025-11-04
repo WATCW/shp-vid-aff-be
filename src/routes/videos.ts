@@ -150,13 +150,15 @@ export const videoRoutes = new Elysia({ prefix: '/videos' })
     '/generate',
     async ({ body }) => {
       try {
-        const { productId, templateId, musicId, customText } = body
+        const { productId, templateId, musicId, customText, enableVoiceNarration, narrationText } = body
 
         logger.info('[VIDEO-GEN] 🎬 Starting synchronous video generation:', {
           productId,
           templateId,
           musicId,
           customTextLength: customText?.length,
+          enableVoiceNarration,
+          hasNarrationText: !!narrationText,
         })
 
         // Get product
@@ -197,10 +199,10 @@ export const videoRoutes = new Elysia({ prefix: '/videos' })
         const video = await videoGeneratorService.generateVideo({
           productId: product.productId,
           templateId,
-          customConfig: {
-            musicId,
-            customText,
-          },
+          musicId,
+          customText,
+          enableVoiceNarration,
+          narrationText,
         })
 
         logger.info('[VIDEO-GEN] ✅ Video generated successfully:', video._id)
@@ -229,6 +231,8 @@ export const videoRoutes = new Elysia({ prefix: '/videos' })
         templateId: t.Optional(t.String()),
         musicId: t.Optional(t.String()),
         customText: t.Optional(t.Array(t.String())),
+        enableVoiceNarration: t.Optional(t.Boolean()),
+        narrationText: t.Optional(t.String()),
       }),
     }
   )
