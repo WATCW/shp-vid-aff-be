@@ -486,7 +486,7 @@ export class VideoGeneratorService {
 
     logger.info('[VIDEO-GEN] Input list file created successfully')
 
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       let command = ffmpeg()
         .input(inputListPath)
         .inputOptions([
@@ -505,48 +505,66 @@ export class VideoGeneratorService {
           '-max_muxing_queue_size 1024', // Prevent memory overflow
         ])
 
-      // Handle audio inputs (music and/or narration)
+      // Handle audio inputs (music and/or narration) - MUST be done BEFORE .run()
       const hasMusic = !!musicId
       const hasNarration = !!narrationAudioPath && existsSync(narrationAudioPath)
 
+      logger.info('[VIDEO-GEN] Audio setup:', { hasMusic, hasNarration, musicId })
+
       if (hasMusic && hasNarration) {
         // Both music and narration - mix them together
-        Music.findById(musicId).then((music) => {
-          if (music && existsSync(music.filePath)) {
-            command = command
-              .input(music.filePath) // Background music
-              .input(narrationAudioPath!) // Voice narration
-              .complexFilter([
-                // Lower music volume and mix with narration
-                '[1:a]volume=0.3[music]', // Music at 30% volume
-                '[2:a]volume=1.0[narration]', // Narration at 100% volume
-                '[music][narration]amix=inputs=2:duration=first[aout]', // Mix both
-              ])
-              .outputOptions([
-                '-map 0:v', // Video from first input
-                '-map [aout]', // Mixed audio
-                '-c:v libx264',
-                '-c:a aac',
-                '-b:a 128k',
-                '-shortest',
-              ])
-          }
-        })
+        const music = await Music.findById(musicId)
+        logger.info('[VIDEO-GEN] Music found:', { name: music?.name, path: music?.filePath, exists: music ? existsSync(music.filePath) : false })
+
+        if (music && existsSync(music.filePath)) {
+          logger.info('[VIDEO-GEN] Adding music + narration (mixed)')
+          command = command
+            .input(music.filePath) // Background music
+            .input(narrationAudioPath!) // Voice narration
+            .complexFilter([
+              // Lower music volume and mix with narration
+              '[1:a]volume=0.3[music]', // Music at 30% volume
+              '[2:a]volume=1.0[narration]', // Narration at 100% volume
+              '[music][narration]amix=inputs=2:duration=first[aout]', // Mix both
+            ])
+            .outputOptions([
+              '-map 0:v', // Video from first input
+              '-map [aout]', // Mixed audio
+              '-c:v libx264',
+              '-c:a aac',
+              '-b:a 128k',
+              '-shortest',
+            ])
+        } else {
+          logger.warn('[VIDEO-GEN] Music file not found, using narration only')
+          command = command
+            .input(narrationAudioPath)
+            .outputOptions([
+              '-c:a aac',
+              '-b:a 128k',
+              '-shortest',
+            ])
+        }
       } else if (hasMusic) {
         // Only music
-        Music.findById(musicId).then((music) => {
-          if (music && existsSync(music.filePath)) {
-            command = command
-              .input(music.filePath)
-              .outputOptions([
-                '-c:a aac',
-                '-b:a 128k',
-                '-shortest',
-              ])
-          }
-        })
+        const music = await Music.findById(musicId)
+        logger.info('[VIDEO-GEN] Music found:', { name: music?.name, path: music?.filePath, exists: music ? existsSync(music.filePath) : false })
+
+        if (music && existsSync(music.filePath)) {
+          logger.info('[VIDEO-GEN] Adding background music only')
+          command = command
+            .input(music.filePath)
+            .outputOptions([
+              '-c:a aac',
+              '-b:a 128k',
+              '-shortest',
+            ])
+        } else {
+          logger.warn('[VIDEO-GEN] Music file not found at:', music?.filePath)
+        }
       } else if (hasNarration) {
         // Only narration
+        logger.info('[VIDEO-GEN] Adding narration only')
         command = command
           .input(narrationAudioPath)
           .outputOptions([
@@ -554,6 +572,8 @@ export class VideoGeneratorService {
             '-b:a 128k',
             '-shortest',
           ])
+      } else {
+        logger.info('[VIDEO-GEN] No audio inputs (silent video)')
       }
 
       command
