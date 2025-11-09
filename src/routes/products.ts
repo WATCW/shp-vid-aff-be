@@ -16,6 +16,7 @@ export const productRoutes = new Elysia({ prefix: '/products' })
           status,
           shopName,
           search,
+          facebookPosted,
           sortBy = 'uploadedAt',
           sortOrder = 'desc',
         } = query
@@ -40,6 +41,11 @@ export const productRoutes = new Elysia({ prefix: '/products' })
             { name: { $regex: search, $options: 'i' } },
             { productId: { $regex: search, $options: 'i' } },
           ]
+        }
+
+        // Filter by Facebook posted status
+        if (facebookPosted !== undefined) {
+          filter.facebookPosted = facebookPosted === 'true'
         }
 
         // Build sort
@@ -83,6 +89,7 @@ export const productRoutes = new Elysia({ prefix: '/products' })
         status: t.Optional(t.String()),
         shopName: t.Optional(t.String()),
         search: t.Optional(t.String()),
+        facebookPosted: t.Optional(t.String()),
         sortBy: t.Optional(t.String()),
         sortOrder: t.Optional(t.String()),
       }),

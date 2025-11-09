@@ -42,6 +42,11 @@ export interface IProduct extends Document {
 
   status: 'pending' | 'ai_processing' | 'ready' | 'video_generating' | 'completed' | 'failed'
 
+  // Facebook posting status
+  facebookPosted: boolean
+  facebookPostId?: string
+  facebookPostedAt?: Date
+
   uploadedAt: Date
   updatedAt: Date
 }
@@ -130,6 +135,19 @@ const ProductSchema = new Schema<IProduct>({
     index: true,
   },
 
+  // Facebook posting status
+  facebookPosted: {
+    type: Boolean,
+    default: false,
+    index: true,
+  },
+  facebookPostId: {
+    type: String,
+  },
+  facebookPostedAt: {
+    type: Date,
+  },
+
   uploadedAt: {
     type: Date,
     default: Date.now,
@@ -149,6 +167,7 @@ const ProductSchema = new Schema<IProduct>({
 // Indexes for performance
 ProductSchema.index({ status: 1, uploadedAt: -1 })
 ProductSchema.index({ shopName: 1, uploadedAt: -1 })
+ProductSchema.index({ facebookPosted: 1, uploadedAt: -1 })
 
 export const Product = mongoose.model<IProduct>('Product', ProductSchema)
 

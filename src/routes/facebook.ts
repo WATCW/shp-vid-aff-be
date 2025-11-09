@@ -1,5 +1,7 @@
 import { Elysia, t } from 'elysia'
 import facebookService from '@services/facebook.service'
+import { FacebookPost } from '@models/facebook-post.model'
+import { Product } from '@models/product.model'
 import logger from '@utils/logger'
 
 export const facebookRoutes = new Elysia({ prefix: '/facebook' })
@@ -39,11 +41,25 @@ export const facebookRoutes = new Elysia({ prefix: '/facebook' })
           hashtagsArray = []
         }
 
+        // Log received images info
+        logger.info('[Facebook] Received images:', {
+          imagesType: typeof images,
+          imagesArray: Array.isArray(images),
+          imagesLength: images?.length || 0,
+          firstImageType: images?.[0] ? typeof images[0] : 'undefined',
+          firstImageName: images?.[0]?.name || 'no name'
+        })
+
         // Convert File objects to Buffers
         const imageBuffers: Buffer[] = []
-        for (const image of images) {
-          const arrayBuffer = await image.arrayBuffer()
-          imageBuffers.push(Buffer.from(arrayBuffer))
+        if (images && Array.isArray(images)) {
+          for (const image of images) {
+            logger.info(`[Facebook] Processing image: ${image.name}, size: ${image.size}`)
+            const arrayBuffer = await image.arrayBuffer()
+            imageBuffers.push(Buffer.from(arrayBuffer))
+          }
+        } else {
+          logger.error('[Facebook] Images is not an array or undefined:', images)
         }
 
         logger.info('[Facebook] Creating post:', {
@@ -53,18 +69,66 @@ export const facebookRoutes = new Elysia({ prefix: '/facebook' })
           imagesCount: imageBuffers.length,
         })
 
-        // Create Facebook post
-        const result = await facebookService.createPost({
+        // Get product info for logging
+        const product = await Product.findById(productId)
+        if (!product) {
+          set.status = 404
+          return {
+            success: false,
+            error: 'Product not found',
+          }
+        }
+
+        // Create Facebook post history record (pending)
+        const facebookPost = new FacebookPost({
+          productId: product._id,
+          productName: product.name,
+          productPrice: product.price,
+          productUrl: product.productUrl,
+          affiliateUrl: product.affiliateUrl,
           caption,
           hashtags: hashtagsArray,
-          productUrl,
-          images: imageBuffers,
+          status: 'pending',
         })
 
-        return {
-          success: true,
-          data: result,
-          message: 'โพสต์ไป Facebook สำเร็จ!',
+        try {
+          // Create Facebook post
+          const result = await facebookService.createPost({
+            caption,
+            hashtags: hashtagsArray,
+            productUrl,
+            images: imageBuffers,
+          })
+
+          // Update history record with success
+          facebookPost.status = 'success'
+          facebookPost.facebookPostId = result.postId
+          facebookPost.facebookPhotoIds = result.photoIds || (result.photoId ? [result.photoId] : [])
+          facebookPost.postedAt = new Date()
+          await facebookPost.save()
+
+          // Update product status
+          product.facebookPosted = true
+          product.facebookPostId = result.postId
+          product.facebookPostedAt = new Date()
+          await product.save()
+
+          logger.info('[Facebook] Post successful and saved to history:', result.postId)
+
+          return {
+            success: true,
+            data: result,
+            message: 'โพสต์ไป Facebook สำเร็จ!',
+          }
+        } catch (postError) {
+          // Update history record with failure
+          facebookPost.status = 'failed'
+          facebookPost.errorMessage = postError instanceof Error ? postError.message : 'Unknown error'
+          facebookPost.errorCode = (postError as any)?.code
+          await facebookPost.save()
+
+          logger.error('[Facebook] Post failed:', postError)
+          throw postError
         }
       } catch (error) {
         logger.error('[Facebook] Post error:', error)
@@ -241,6 +305,110 @@ export const facebookRoutes = new Elysia({ prefix: '/facebook' })
         tags: ['Facebook'],
         summary: 'Validate Facebook access token',
         description: 'ตรวจสอบความถูกต้องและวันหมดอายุของ Access Token',
+      },
+    }
+  )
+
+  /**
+   * GET /api/facebook/history
+   * ดูประวัติการโพสต์ Facebook
+   */
+  .get(
+    '/history',
+    async ({ query, set }) => {
+      try {
+        const limit = parseInt(query.limit as string) || 20
+        const skip = parseInt(query.skip as string) || 0
+        const status = query.status as string
+
+        const filter: any = {}
+        if (status && ['success', 'failed', 'pending'].includes(status)) {
+          filter.status = status
+        }
+
+        const [posts, total] = await Promise.all([
+          FacebookPost.find(filter)
+            .sort({ createdAt: -1 })
+            .limit(limit)
+            .skip(skip)
+            .populate('productId', 'name price productUrl'),
+          FacebookPost.countDocuments(filter),
+        ])
+
+        return {
+          success: true,
+          data: posts,
+          pagination: {
+            total,
+            limit,
+            skip,
+            hasMore: skip + posts.length < total,
+          },
+        }
+      } catch (error) {
+        logger.error('[Facebook] Get history error:', error)
+
+        set.status = 500
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        }
+      }
+    },
+    {
+      query: t.Object({
+        limit: t.Optional(t.String()),
+        skip: t.Optional(t.String()),
+        status: t.Optional(t.String()),
+      }),
+      detail: {
+        tags: ['Facebook'],
+        summary: 'Get Facebook post history',
+        description: 'ดูประวัติการโพสต์ Facebook พร้อม filter และ pagination',
+      },
+    }
+  )
+
+  /**
+   * GET /api/facebook/history/:id
+   * ดูรายละเอียดประวัติการโพสต์เฉพาะ
+   */
+  .get(
+    '/history/:id',
+    async ({ params, set }) => {
+      try {
+        const post = await FacebookPost.findById(params.id).populate('productId')
+
+        if (!post) {
+          set.status = 404
+          return {
+            success: false,
+            error: 'Post history not found',
+          }
+        }
+
+        return {
+          success: true,
+          data: post,
+        }
+      } catch (error) {
+        logger.error('[Facebook] Get history detail error:', error)
+
+        set.status = 500
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        }
+      }
+    },
+    {
+      params: t.Object({
+        id: t.String(),
+      }),
+      detail: {
+        tags: ['Facebook'],
+        summary: 'Get Facebook post history detail',
+        description: 'ดูรายละเอียดประวัติการโพสต์ Facebook ตาม ID',
       },
     }
   )
