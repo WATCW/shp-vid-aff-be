@@ -19,6 +19,7 @@ import { videoRoutes } from './routes/videos'
 import { templateRoutes } from './routes/templates'
 import { musicRoutes } from './routes/music'
 import { adminRoutes } from './routes/admin'
+import { facebookRoutes } from './routes/facebook'
 
 // Ensure storage directories exist
 const ensureDirectories = () => {
@@ -114,6 +115,7 @@ const startServer = async () => {
               { name: 'Videos', description: 'Video generation and management' },
               { name: 'Templates', description: 'Video templates' },
               { name: 'Music', description: 'Music and assets management' },
+              { name: 'Facebook', description: 'Facebook Page posting' },
             ],
           },
           path: '/swagger',
@@ -150,6 +152,7 @@ const startServer = async () => {
           .use(templateRoutes)
           .use(musicRoutes)
           .use(adminRoutes)
+          .use(facebookRoutes)
       )
 
       // Serve uploaded files and videos
