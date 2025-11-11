@@ -65,19 +65,30 @@ export const facebookRoutes = new Elysia({ prefix: '/facebook' })
             imageBuffers.push(Buffer.from(arrayBuffer))
           }
         } else {
-          // No uploaded images - use scraped product images
-          logger.info('[Facebook] No uploaded images, using scraped product images')
+          // No uploaded images - use product images (scraped or fallback)
+          logger.info('[Facebook] No uploaded images, using product images')
 
+          // Collect images from scrapedData
           if (product.scrapedData?.images && product.scrapedData.images.length > 0) {
-            imageUrls = product.scrapedData.images
-            logger.info(`[Facebook] Found ${imageUrls.length} scraped images`)
-          } else {
+            imageUrls.push(...product.scrapedData.images)
+            logger.info(`[Facebook] Found ${product.scrapedData.images.length} scraped images`)
+          }
+
+          // Collect images from fallbackImages
+          if (product.fallbackImages?.images && product.fallbackImages.images.length > 0) {
+            imageUrls.push(...product.fallbackImages.images)
+            logger.info(`[Facebook] Found ${product.fallbackImages.images.length} fallback images`)
+          }
+
+          if (imageUrls.length === 0) {
             set.status = 400
             return {
               success: false,
-              error: 'No images available. Please upload images or ensure product has scraped images.',
+              error: 'No images available. Please upload images or ensure product has images.',
             }
           }
+
+          logger.info(`[Facebook] Total product images: ${imageUrls.length}`)
         }
 
         logger.info('[Facebook] Creating post:', {
