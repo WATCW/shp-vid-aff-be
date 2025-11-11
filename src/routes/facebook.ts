@@ -24,11 +24,22 @@ export const facebookRoutes = new Elysia({ prefix: '/facebook' })
           }
         }
 
-        if (!images || images.length === 0) {
+        // productId is now required to fetch product images if no images provided
+        if (!productId) {
           set.status = 400
           return {
             success: false,
-            error: 'At least one image is required',
+            error: 'productId is required',
+          }
+        }
+
+        // Get product info first
+        const product = await Product.findById(productId)
+        if (!product) {
+          set.status = 404
+          return {
+            success: false,
+            error: 'Product not found',
           }
         }
 
@@ -41,43 +52,41 @@ export const facebookRoutes = new Elysia({ prefix: '/facebook' })
           hashtagsArray = []
         }
 
-        // Log received images info
-        logger.info('[Facebook] Received images:', {
-          imagesType: typeof images,
-          imagesArray: Array.isArray(images),
-          imagesLength: images?.length || 0,
-          firstImageType: images?.[0] ? typeof images[0] : 'undefined',
-          firstImageName: images?.[0]?.name || 'no name'
-        })
+        // Determine which images to use
+        let imageBuffers: Buffer[] = []
+        let imageUrls: string[] = []
 
-        // Convert File objects to Buffers
-        const imageBuffers: Buffer[] = []
-        if (images && Array.isArray(images)) {
+        if (images && Array.isArray(images) && images.length > 0) {
+          // Use uploaded images
+          logger.info('[Facebook] Using uploaded images:', images.length)
           for (const image of images) {
             logger.info(`[Facebook] Processing image: ${image.name}, size: ${image.size}`)
             const arrayBuffer = await image.arrayBuffer()
             imageBuffers.push(Buffer.from(arrayBuffer))
           }
         } else {
-          logger.error('[Facebook] Images is not an array or undefined:', images)
+          // No uploaded images - use scraped product images
+          logger.info('[Facebook] No uploaded images, using scraped product images')
+
+          if (product.scrapedData?.images && product.scrapedData.images.length > 0) {
+            imageUrls = product.scrapedData.images
+            logger.info(`[Facebook] Found ${imageUrls.length} scraped images`)
+          } else {
+            set.status = 400
+            return {
+              success: false,
+              error: 'No images available. Please upload images or ensure product has scraped images.',
+            }
+          }
         }
 
         logger.info('[Facebook] Creating post:', {
           productId,
           caption: caption.substring(0, 50) + '...',
           hashtagsCount: hashtagsArray.length,
-          imagesCount: imageBuffers.length,
+          uploadedImagesCount: imageBuffers.length,
+          scrapedImagesCount: imageUrls.length,
         })
-
-        // Get product info for logging
-        const product = await Product.findById(productId)
-        if (!product) {
-          set.status = 404
-          return {
-            success: false,
-            error: 'Product not found',
-          }
-        }
 
         // Create Facebook post history record (pending)
         const facebookPost = new FacebookPost({
@@ -92,6 +101,26 @@ export const facebookRoutes = new Elysia({ prefix: '/facebook' })
         })
 
         try {
+          // If using scraped images, download them to buffers
+          if (imageUrls.length > 0) {
+            logger.info(`[Facebook] Downloading ${imageUrls.length} images from URLs...`)
+            const axios = (await import('axios')).default
+
+            for (const url of imageUrls) {
+              try {
+                const response = await axios.get(url, { responseType: 'arraybuffer' })
+                imageBuffers.push(Buffer.from(response.data))
+                logger.info(`[Facebook] Downloaded image: ${url.substring(0, 50)}...`)
+              } catch (downloadError) {
+                logger.error(`[Facebook] Failed to download image: ${url}`, downloadError)
+              }
+            }
+
+            if (imageBuffers.length === 0) {
+              throw new Error('Failed to download any product images')
+            }
+          }
+
           // Create Facebook post
           const result = await facebookService.createPost({
             caption,
@@ -144,11 +173,11 @@ export const facebookRoutes = new Elysia({ prefix: '/facebook' })
     },
     {
       body: t.Object({
-        productId: t.Optional(t.String()),
+        productId: t.String(),
         caption: t.String(),
         hashtags: t.Any(), // Can be string or array
         productUrl: t.String(),
-        images: t.Files(),
+        images: t.Optional(t.Files()),
       }),
       detail: {
         tags: ['Facebook'],
