@@ -58,7 +58,7 @@ export const facebookRoutes = new Elysia({ prefix: '/facebook' })
 
         if (images && Array.isArray(images) && images.length > 0) {
           // Use uploaded images
-          logger.info('[Facebook] Using uploaded images:', images.length)
+          logger.info(`[Facebook] Using ${images.length} uploaded images`)
           for (const image of images) {
             logger.info(`[Facebook] Processing image: ${image.name}, size: ${image.size}`)
             const arrayBuffer = await image.arrayBuffer()
@@ -84,7 +84,7 @@ export const facebookRoutes = new Elysia({ prefix: '/facebook' })
             set.status = 400
             return {
               success: false,
-              error: 'No images available. Please upload images or ensure product has images.',
+              error: 'No images available. Please upload images or ensure product has fallback images.',
             }
           }
 
@@ -96,7 +96,7 @@ export const facebookRoutes = new Elysia({ prefix: '/facebook' })
           caption: caption.substring(0, 50) + '...',
           hashtagsCount: hashtagsArray.length,
           uploadedImagesCount: imageBuffers.length,
-          scrapedImagesCount: imageUrls.length,
+          productImagesCount: imageUrls.length,
         })
 
         // Create Facebook post history record (pending)
@@ -112,9 +112,9 @@ export const facebookRoutes = new Elysia({ prefix: '/facebook' })
         })
 
         try {
-          // If using scraped images, download them to buffers
+          // Download product images if needed
           if (imageUrls.length > 0) {
-            logger.info(`[Facebook] Downloading ${imageUrls.length} images from URLs...`)
+            logger.info(`[Facebook] Downloading ${imageUrls.length} product images...`)
             const axios = (await import('axios')).default
 
             for (const url of imageUrls) {
