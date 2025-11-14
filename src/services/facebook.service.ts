@@ -1,6 +1,5 @@
 import axios from 'axios'
 import FormData from 'form-data'
-import config from '@config/env'
 import logger from '@utils/logger'
 
 interface FacebookPost {
@@ -56,6 +55,11 @@ class FacebookService {
 
       logger.info(`[Facebook] Creating post with ${images.length} images`)
 
+      // No images - text-only post
+      if (images.length === 0) {
+        return await this.postTextOnly(message, productUrl)
+      }
+
       // Single image
       if (images.length === 1) {
         return await this.postSinglePhoto(message, images[0], productUrl)
@@ -64,8 +68,29 @@ class FacebookService {
       // Multiple images
       return await this.postMultiplePhotos(message, images, productUrl)
     } catch (error) {
-      logger.error('[Facebook] Post error:', error)
+      logger.error('[Facebook] Post error:', { error })
       throw this.handleError(error)
+    }
+  }
+
+  /**
+   * โพสต์แบบไม่มีรูป (text-only)
+   */
+  private async postTextOnly(message: string, link: string): Promise<FacebookPostResult> {
+    const response = await axios.post(
+      `${this.baseUrl}/${this.pageId}/feed`,
+      {
+        message,
+        link,
+        access_token: this.pageAccessToken,
+      }
+    )
+
+    logger.info('[Facebook] Text-only post created:', response.data.id)
+
+    return {
+      success: true,
+      postId: response.data.id,
     }
   }
 
@@ -224,7 +249,7 @@ class FacebookService {
         userId: data.user_id,
       }
     } catch (error) {
-      logger.error('[Facebook] Token validation error:', error)
+      logger.error('[Facebook] Token validation error:', { error })
       return { isValid: false, error: error instanceof Error ? error.message : 'Unknown error' }
     }
   }

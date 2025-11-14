@@ -52,7 +52,7 @@ export const facebookRoutes = new Elysia({ prefix: '/facebook' })
           hashtagsArray = []
         }
 
-        // Determine which images to use
+        // Determine which images to use (now optional)
         let imageBuffers: Buffer[] = []
         let imageUrls: string[] = []
 
@@ -65,8 +65,8 @@ export const facebookRoutes = new Elysia({ prefix: '/facebook' })
             imageBuffers.push(Buffer.from(arrayBuffer))
           }
         } else {
-          // No uploaded images - use product images (scraped or fallback)
-          logger.info('[Facebook] No uploaded images, using product images')
+          // No uploaded images - try to use product images (scraped or fallback)
+          logger.info('[Facebook] No uploaded images, attempting to use product images')
 
           // Collect images from scrapedData
           if (product.scrapedData?.images && product.scrapedData.images.length > 0) {
@@ -81,14 +81,10 @@ export const facebookRoutes = new Elysia({ prefix: '/facebook' })
           }
 
           if (imageUrls.length === 0) {
-            set.status = 400
-            return {
-              success: false,
-              error: 'No images available. Please upload images or ensure product has fallback images.',
-            }
+            logger.warn('[Facebook] No images found - will post text-only')
+          } else {
+            logger.info(`[Facebook] Total product images: ${imageUrls.length}`)
           }
-
-          logger.info(`[Facebook] Total product images: ${imageUrls.length}`)
         }
 
         logger.info('[Facebook] Creating post:', {
@@ -128,11 +124,11 @@ export const facebookRoutes = new Elysia({ prefix: '/facebook' })
             }
 
             if (imageBuffers.length === 0) {
-              throw new Error('Failed to download any product images')
+              logger.warn('[Facebook] Failed to download any product images - will post text-only')
             }
           }
 
-          // Create Facebook post
+          // Create Facebook post (with or without images)
           const result = await facebookService.createPost({
             caption,
             hashtags: hashtagsArray,
