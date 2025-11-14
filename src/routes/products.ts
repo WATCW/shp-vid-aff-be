@@ -181,6 +181,11 @@ export const productRoutes = new Elysia({ prefix: '/products' })
         id: t.String(),
       }),
       body: t.Object({
+        name: t.Optional(t.String()),
+        price: t.Optional(t.Number()),
+        shopName: t.Optional(t.String()),
+        affiliateUrl: t.Optional(t.String()),
+        productUrl: t.Optional(t.String()),
         status: t.Optional(t.String()),
         aiContent: t.Optional(t.Object({
           caption: t.String(),
