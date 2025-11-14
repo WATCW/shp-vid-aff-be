@@ -17,6 +17,7 @@ export const uploadRoutes = new Elysia({ prefix: '/upload' })
       try {
         logger.info('📥 [UPLOAD] CSV upload request received')
         const file = body.file
+        const asOfDate = body.asOfDate // Format: YYYY-MM-DD
 
         if (!file) {
           logger.warn('❌ [UPLOAD] No file provided in request')
@@ -24,6 +25,10 @@ export const uploadRoutes = new Elysia({ prefix: '/upload' })
             success: false,
             error: 'No file provided',
           }
+        }
+
+        if (asOfDate) {
+          logger.info(`📅 [UPLOAD] Upload with as_of_date: ${asOfDate}`)
         }
 
         logger.info(`📄 [UPLOAD] File received: ${file.name} (${file.size} bytes, type: ${file.type})`)
@@ -118,8 +123,11 @@ export const uploadRoutes = new Elysia({ prefix: '/upload' })
               continue
             }
 
-            // Create new product
-            const newProduct = await Product.create(product)
+            // Create new product with asOfDate if provided
+            const newProduct = await Product.create({
+              ...product,
+              ...(asOfDate && { asOfDate }),
+            })
             logger.info(`✅ [UPLOAD] Product saved: ${product.productId} - ${product.name}`)
             savedProducts.push(newProduct)
 
@@ -171,11 +179,12 @@ export const uploadRoutes = new Elysia({ prefix: '/upload' })
         file: t.File({
           maxSize: config.storage.maxFileSize,
         }),
+        asOfDate: t.Optional(t.String()),
       }),
       detail: {
         tags: ['Upload'],
         summary: 'Upload CSV file',
-        description: 'Upload and parse Shopee affiliate CSV file',
+        description: 'Upload and parse Shopee affiliate CSV file with optional as_of_date (YYYY-MM-DD)',
       },
     }
   )

@@ -246,6 +246,54 @@ export const productRoutes = new Elysia({ prefix: '/products' })
   )
 
   /**
+   * Bulk delete products by as_of_date
+   */
+  .delete(
+    '/bulk/by-date',
+    async ({ query }) => {
+      try {
+        const { asOfDate } = query
+
+        if (!asOfDate) {
+          return {
+            success: false,
+            error: 'asOfDate is required',
+          }
+        }
+
+        logger.info(`Bulk deleting products with asOfDate: ${asOfDate}`)
+
+        const result = await Product.deleteMany({ asOfDate })
+
+        logger.info(`Bulk deleted ${result.deletedCount} products`)
+
+        return {
+          success: true,
+          message: `Deleted ${result.deletedCount} products`,
+          deletedCount: result.deletedCount,
+        }
+
+      } catch (error) {
+        logger.error('Failed to bulk delete products:', error)
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to bulk delete products',
+        }
+      }
+    },
+    {
+      query: t.Object({
+        asOfDate: t.String(),
+      }),
+      detail: {
+        tags: ['Products'],
+        summary: 'Bulk delete products by as_of_date',
+        description: 'Delete all products with a specific as_of_date (YYYY-MM-DD)',
+      },
+    }
+  )
+
+  /**
    * Get product statistics
    */
   .get(

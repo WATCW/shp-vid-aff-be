@@ -47,6 +47,9 @@ export interface IProduct extends Document {
   facebookPostId?: string
   facebookPostedAt?: Date
 
+  // Date for batch operations
+  asOfDate?: string // Format: YYYY-MM-DD
+
   uploadedAt: Date
   updatedAt: Date
 }
@@ -146,6 +149,12 @@ const ProductSchema = new Schema<IProduct>({
   },
   facebookPostedAt: {
     type: Date,
+  },
+
+  // Date for batch operations (YYYY-MM-DD format)
+  asOfDate: {
+    type: String,
+    index: true,
   },
 
   uploadedAt: {
